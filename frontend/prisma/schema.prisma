@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// AUTENTICACIÓN Y USUARIOS
+// ============================================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(DOCENTE)
+  active    Boolean  @default(true)
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  invitations Invitation[] @relation("InvitedBy")
+  cursos      Curso[]      @relation("Docente")
+}
+
+enum Role {
+  ADMIN
+  DOCENTE
+  VISUALIZADOR
+}
+
+model Invitation {
+  id          String   @id @default(cuid())
+  email       String
+  code        String   @unique
+  role        Role     @default(DOCENTE)
+  used        Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  createdById String
+  createdBy   User     @relation("InvitedBy", fields: [createdById], references: [id])
+}
+
+// ============================================================
+// ESTRUCTURA ACADÉMICA
+// ============================================================
+
+model Grado {
+  id        String   @id @default(cuid())
+  nombre    String
+  nivel     Nivel
+  orden     Int
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  aulas   Aula[]
+  alumnos Alumno[]
+  cursos  Curso[]
+}
+
+enum Nivel {
+  INICIAL
+  PRIMARIA
+  SECUNDARIA
+}
+
+model Aula {
+  id        String   @id @default(cuid())
+  seccion   String
+  capacidad Int      @default(40)
+  activo    Boolean  @default(true)
+  gradoId   String
+  grado     Grado    @relation(fields: [gradoId], references: [id])
+  createdAt DateTime @default(now())
+
+  alumnos Alumno[]
+
+  @@unique([gradoId, seccion])
+}
+
+model Curso {
+  id          String   @id @default(cuid())
+  nombre      String
+  codigo      String
+  descripcion String?
+  color       String   @default("#4F46E5")
+  activo      Boolean  @default(true)
+  gradoId     String
+  grado       Grado    @relation(fields: [gradoId], references: [id])
+  docenteId   String?
+  docente     User?    @relation("Docente", fields: [docenteId], references: [id])
+  createdAt   DateTime @default(now())
+
+  bimestres  Bimestre[]
+  matriculas Matricula[]
+
+  @@unique([gradoId, codigo])
+}
+
+// ============================================================
+// ALUMNOS Y MATRÍCULAS
+// ============================================================
+
+model Alumno {
+  id              String    @id @default(cuid())
+  nombres         String
+  apellidos       String
+  codigo          String    @unique
+  dni             String?   @unique
+  fechaNacimiento DateTime?
+  sexo            Sexo      @default(MASCULINO)
+  email           String?
+  telefono        String?
+  direccion       String?
+  foto            String?
+  activo          Boolean   @default(true)
+  gradoId         String
+  grado           Grado     @relation(fields: [gradoId], references: [id])
+  aulaId          String
+  aula            Aula      @relation(fields: [aulaId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  matriculas Matricula[]
+}
+
+enum Sexo {
+  MASCULINO
+  FEMENINO
+}
+
+model Matricula {
+  id        String   @id @default(cuid())
+  alumnoId  String
+  cursoId   String
+  anio      Int
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  alumno         Alumno         @relation(fields: [alumnoId], references: [id])
+  curso          Curso          @relation(fields: [cursoId], references: [id])
+  calificaciones Calificacion[]
+
+  @@unique([alumnoId, cursoId, anio])
+}
+
+// ============================================================
+// SISTEMA DE CALIFICACIONES
+// ============================================================
+
+model Bimestre {
+  id       String  @id @default(cuid())
+  nombre   String
+  numero   Int
+  activo   Boolean @default(true)
+  cursoId  String
+  curso    Curso   @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+
+  criterios Criterio[]
+
+  @@unique([cursoId, numero])
+}
+
+model Criterio {
+  id         String   @id @default(cuid())
+  nombre     String
+  peso       Float    @default(1.0)
+  orden      Int      @default(0)
+  activo     Boolean  @default(true)
+  bimestreId String
+  bimestre   Bimestre @relation(fields: [bimestreId], references: [id], onDelete: Cascade)
+
+  calificaciones Calificacion[]
+}
+
+model Calificacion {
+  id          String   @id @default(cuid())
+  nota        Float?
+  observacion String?
+  matriculaId String
+  criterioId  String
+  updatedAt   DateTime @updatedAt
+
+  matricula Matricula @relation(fields: [matriculaId], references: [id], onDelete: Cascade)
+  criterio  Criterio  @relation(fields: [criterioId], references: [id], onDelete: Cascade)
+
+  @@unique([matriculaId, criterioId])
+}
