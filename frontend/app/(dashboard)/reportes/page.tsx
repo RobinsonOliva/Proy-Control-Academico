@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { prisma } from "@/lib/db";
 import { ANIO_ACTUAL } from "@/lib/utils";
 import Link from "next/link";
