@@ -47,7 +47,18 @@ export async function POST(req: NextRequest) {
   }
   try {
     const data = schema.parse(await req.json());
-    const curso = await prisma.curso.create({ data: { ...data, codigo: data.codigo.toUpperCase() } });
+    const codigo = data.codigo.toUpperCase();
+
+    // Limpiar cualquier registro soft-deleted con el mismo código+grado
+    const viejo = await prisma.curso.findFirst({
+      where: { gradoId: data.gradoId, codigo, activo: false },
+    });
+    if (viejo) {
+      await prisma.matricula.deleteMany({ where: { cursoId: viejo.id } });
+      await prisma.curso.delete({ where: { id: viejo.id } });
+    }
+
+    const curso = await prisma.curso.create({ data: { ...data, codigo } });
 
     await Promise.all(
       [1, 2, 3, 4].map((num) =>
@@ -61,7 +72,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     if (err instanceof z.ZodError) return NextResponse.json({ error: "Datos inválidos." }, { status: 422 });
     if ((err as { code?: string }).code === "P2002")
-      return NextResponse.json({ error: "Ya existe un curso con ese código en este grado." }, { status: 409 });
+      return NextResponse.json({ error: "Ya existe un curso activo con ese código en este grado." }, { status: 409 });
     return NextResponse.json({ error: "Error al crear curso." }, { status: 500 });
   }
 }
