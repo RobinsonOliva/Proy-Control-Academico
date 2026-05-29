@@ -1,22 +1,36 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
-import { Plus, Trash2, ClipboardList, ChevronDown } from "lucide-react";
-import { ANIO_ACTUAL } from "@/lib/utils";
+import {
+  Plus, Trash2, ClipboardList, Search, X,
+  ChevronDown, User, BookOpen, CheckCircle2, AlertCircle
+} from "lucide-react";
+import { ANIO_ACTUAL, cn } from "@/lib/utils";
 
+type Alumno = {
+  id: string; nombres: string; apellidos: string; codigo: string;
+  grado: { id: string; nombre: string };
+  aula: { id: string; seccion: string };
+  _count: { matriculas: number };
+};
+type Curso = {
+  id: string; nombre: string; codigo: string; color: string; gradoId: string;
+  docente?: { name: string } | null;
+};
 type Matricula = {
-  id: string; anio: number; activo: boolean;
+  id: string; anio: number;
   alumno: { nombres: string; apellidos: string; codigo: string };
   curso: { nombre: string; codigo: string; color: string; grado: { nombre: string } };
 };
-type Alumno = { id: string; nombres: string; apellidos: string; codigo: string; grado: { id: string; nombre: string } };
-type Curso = { id: string; nombre: string; codigo: string; color: string; gradoId: string };
 type Grado = { id: string; nombre: string };
 
 export default function MatriculasPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
-  const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [grados, setGrados] = useState<Grado[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,74 +38,155 @@ export default function MatriculasPage() {
   const [saving, setSaving] = useState(false);
   const [filterGrado, setFilterGrado] = useState("");
 
-  const [form, setForm] = useState({
-    alumnoId: "", cursoIds: [] as string[], anio: ANIO_ACTUAL,
-  });
+  // Búsqueda de alumno
+  const [alumnoQuery, setAlumnoQuery] = useState("");
+  const [alumnoResults, setAlumnoResults] = useState<Alumno[]>([]);
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<Alumno | null>(null);
+  const [buscandoAlumno, setBuscandoAlumno] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
-  const alumnoSeleccionado = alumnos.find((a) => a.id === form.alumnoId);
+  const [cursoIds, setCursoIds] = useState<string[]>([]);
+
   const cursosFiltrados = alumnoSeleccionado
     ? cursos.filter((c) => c.gradoId === alumnoSeleccionado.grado.id)
     : [];
 
+  // Cursos ya matriculados del alumno seleccionado
+  const [cursosYaMatriculados, setCursosYaMatriculados] = useState<string[]>([]);
+
   const load = useCallback(async () => {
     const params = new URLSearchParams({ anio: String(ANIO_ACTUAL) });
     if (filterGrado) params.set("gradoId", filterGrado);
-    const [m, a, c, g] = await Promise.all([
+    const [m, c, g] = await Promise.all([
       fetch(`/api/matriculas?${params}`).then((r) => r.json()),
-      fetch("/api/alumnos").then((r) => r.json()),
       fetch("/api/cursos").then((r) => r.json()),
       fetch("/api/grados").then((r) => r.json()),
     ]);
-    setMatriculas(m); setAlumnos(a); setCursos(c); setGrados(g); setLoading(false);
+    setMatriculas(Array.isArray(m) ? m : []);
+    setCursos(Array.isArray(c) ? c : []);
+    setGrados(Array.isArray(g) ? g : []);
+    setLoading(false);
   }, [filterGrado]);
 
   useEffect(() => { load(); }, [load]);
 
-  function toggleCurso(id: string) {
-    setForm((f) => ({
-      ...f,
-      cursoIds: f.cursoIds.includes(id)
-        ? f.cursoIds.filter((c) => c !== id)
-        : [...f.cursoIds, id],
-    }));
+  // Búsqueda de alumno en tiempo real
+  useEffect(() => {
+    if (alumnoQuery.trim().length < 2) {
+      setAlumnoResults([]); setShowDropdown(false); return;
+    }
+    const t = setTimeout(async () => {
+      setBuscandoAlumno(true);
+      const res = await fetch(`/api/alumnos?q=${encodeURIComponent(alumnoQuery)}`);
+      const data = await res.json();
+      setAlumnoResults(Array.isArray(data) ? data.slice(0, 8) : []);
+      setShowDropdown(true);
+      setBuscandoAlumno(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [alumnoQuery]);
+
+  // Cargar cursos ya matriculados al seleccionar alumno
+  async function seleccionarAlumno(alumno: Alumno) {
+    setAlumnoSeleccionado(alumno);
+    setAlumnoQuery(`${alumno.apellidos}, ${alumno.nombres}`);
+    setShowDropdown(false);
+    setCursoIds([]);
+
+    const res = await fetch(`/api/matriculas?alumnoId=${alumno.id}&anio=${ANIO_ACTUAL}`);
+    const data = await res.json();
+    setCursosYaMatriculados(
+      Array.isArray(data) ? data.map((m: { curso: { id: string } }) => m.curso.id) : []
+    );
   }
+
+  function limpiarSeleccion() {
+    setAlumnoSeleccionado(null);
+    setAlumnoQuery("");
+    setAlumnoResults([]);
+    setCursoIds([]);
+    setCursosYaMatriculados([]);
+  }
+
+  function toggleCurso(id: string) {
+    setCursoIds((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    );
+  }
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.cursoIds.length) { toast.error("Selecciona al menos un curso."); return; }
+    if (!alumnoSeleccionado) { toast.error("Selecciona un alumno."); return; }
+    if (!cursoIds.length) { toast.error("Selecciona al menos un curso."); return; }
     setSaving(true);
     const res = await fetch("/api/matriculas", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alumnoId: alumnoSeleccionado.id, cursoIds, anio: ANIO_ACTUAL }),
     });
     setSaving(false);
     if (!res.ok) { const d = await res.json(); toast.error(d.error || "Error."); return; }
     const d = await res.json();
-    toast.success(`${d.created} matrícula(s) registradas.`);
-    setModalOpen(false); setForm({ alumnoId: "", cursoIds: [], anio: ANIO_ACTUAL }); load();
+    toast.success(`${d.created} matrícula(s) registradas correctamente.`);
+    setModalOpen(false);
+    limpiarSeleccion();
+    load();
   }
 
-  async function del(id: string) {
-    if (!confirm("¿Retirar esta matrícula?")) return;
+  async function del(id: string, nombre: string) {
+    if (!confirm(`¿Retirar la matrícula de "${nombre}"?`)) return;
     await fetch(`/api/matriculas/${id}`, { method: "DELETE" });
     toast.success("Matrícula retirada."); load();
   }
+
+  // Agrupar matrículas por alumno para la tabla
+  const matriculasPorAlumno = matriculas.reduce<Record<string, Matricula[]>>((acc, m) => {
+    const key = m.alumno.codigo;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(m);
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Matrículas</h1>
-          <p className="page-subtitle">Año {ANIO_ACTUAL} · {matriculas.length} matrículas activas</p>
+          <p className="page-subtitle">
+            Año {ANIO_ACTUAL} · {matriculas.length} matrículas activas
+            {!isAdmin && " · Solo administradores pueden matricular"}
+          </p>
         </div>
-        <button onClick={() => { setForm({ alumnoId: "", cursoIds: [], anio: ANIO_ACTUAL }); setModalOpen(true); }}
-          className="btn-primary"><Plus size={16} /> Matricular Alumno</button>
+        {isAdmin && (
+          <button
+            onClick={() => { limpiarSeleccion(); setModalOpen(true); }}
+            className="btn-primary"
+          >
+            <Plus size={16} /> Matricular Alumno
+          </button>
+        )}
       </div>
 
+      {/* Filtro por grado */}
       <div className="flex gap-3">
         <div className="relative">
-          <select className="input pl-3 pr-8 appearance-none w-56"
-            value={filterGrado} onChange={(e) => setFilterGrado(e.target.value)}>
+          <select
+            className="input pl-3 pr-8 appearance-none w-56"
+            value={filterGrado}
+            onChange={(e) => setFilterGrado(e.target.value)}
+          >
             <option value="">Todos los grados</option>
             {grados.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
           </select>
@@ -99,99 +194,281 @@ export default function MatriculasPage() {
         </div>
       </div>
 
+      {/* Tabla de matrículas agrupada por alumno */}
       <div className="card">
         {loading ? (
           <div className="p-12 text-center text-gray-400">
             <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-3" />
             Cargando...
           </div>
-        ) : matriculas.length === 0 ? (
+        ) : Object.keys(matriculasPorAlumno).length === 0 ? (
           <div className="p-12 text-center text-gray-400">
             <ClipboardList size={36} className="mx-auto mb-3 opacity-40" />
             <p className="font-medium">No hay matrículas registradas</p>
+            <p className="text-sm mt-1">Usa el botón "Matricular Alumno" para comenzar</p>
           </div>
         ) : (
           <div className="table-container">
             <table className="table">
               <thead>
-                <tr><th>Alumno</th><th>Grado</th><th>Curso</th><th>Año</th><th>Acción</th></tr>
+                <tr>
+                  <th>Alumno</th>
+                  <th>Grado · Sección</th>
+                  <th>Cursos matriculados</th>
+                  <th>Total</th>
+                  {isAdmin && <th>Acción</th>}
+                </tr>
               </thead>
               <tbody>
-                {matriculas.map((m) => (
-                  <tr key={m.id}>
-                    <td>
-                      <p className="font-medium">{m.alumno.apellidos}, {m.alumno.nombres}</p>
-                      <p className="text-xs text-gray-400 font-mono">{m.alumno.codigo}</p>
-                    </td>
-                    <td className="text-sm">{m.curso.grado.nombre}</td>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: m.curso.color }} />
-                        <span className="text-sm">{m.curso.nombre}</span>
-                      </div>
-                    </td>
-                    <td><span className="badge badge-gray">{m.anio}</span></td>
-                    <td>
-                      <button onClick={() => del(m.id)} className="btn-ghost btn-sm text-red-500 hover:bg-red-50">
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {Object.entries(matriculasPorAlumno).map(([codigo, mats]) => {
+                  const alumno = mats[0].alumno;
+                  return (
+                    <tr key={codigo}>
+                      <td>
+                        <p className="font-medium text-gray-900">
+                          {alumno.apellidos}, {alumno.nombres}
+                        </p>
+                        <p className="text-xs text-gray-400 font-mono">{alumno.codigo}</p>
+                      </td>
+                      <td className="text-sm text-gray-600">
+                        {mats[0].curso.grado.nombre}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap gap-1">
+                          {mats.map((m) => (
+                            <div key={m.id} className="flex items-center gap-1 group">
+                              <span
+                                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                                style={{ backgroundColor: m.curso.color }}
+                              >
+                                {m.curso.codigo}
+                              </span>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => del(m.id, `${alumno.apellidos} - ${m.curso.nombre}`)}
+                                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"
+                                  title={`Retirar ${m.curso.nombre}`}
+                                >
+                                  <X size={11} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        <span className="badge badge-blue">{mats.length} cursos</span>
+                      </td>
+                      {isAdmin && (
+                        <td>
+                          <button
+                            onClick={() => {
+                              // Pre-seleccionar alumno para agregar más cursos
+                              setAlumnoQuery(`${alumno.apellidos}, ${alumno.nombres}`);
+                              setModalOpen(true);
+                            }}
+                            className="btn-ghost btn-sm text-primary-600"
+                            title="Agregar más cursos"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
+      {/* Modal de matrícula */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 animate-slide-in">
-            <h2 className="text-lg font-bold text-gray-900 mb-5">Matricular Alumno en Cursos</h2>
-            <form onSubmit={save} className="space-y-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg animate-slide-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Matricular Alumno</h2>
+                <p className="text-xs text-gray-400">Año escolar {ANIO_ACTUAL}</p>
+              </div>
+              <button onClick={() => { setModalOpen(false); limpiarSeleccion(); }}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={save} className="p-6 space-y-5">
+              {/* Buscador de alumno */}
               <div className="form-group">
-                <label className="label">Alumno</label>
-                <select className="input" value={form.alumnoId}
-                  onChange={(e) => setForm({ ...form, alumnoId: e.target.value, cursoIds: [] })} required>
-                  <option value="">Seleccionar alumno...</option>
-                  {alumnos.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.apellidos}, {a.nombres} — {a.grado.nombre}
-                    </option>
-                  ))}
-                </select>
+                <label className="label">
+                  Buscar alumno
+                  <span className="text-gray-400 font-normal ml-1">(escribe nombre, apellido o código)</span>
+                </label>
+                <div ref={searchRef} className="relative">
+                  <div className="relative">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      className={cn(
+                        "input pl-9 pr-9",
+                        alumnoSeleccionado && "border-emerald-400 bg-emerald-50"
+                      )}
+                      placeholder="Ej: García, Juan o código 25001..."
+                      value={alumnoQuery}
+                      onChange={(e) => {
+                        setAlumnoQuery(e.target.value);
+                        if (alumnoSeleccionado) limpiarSeleccion();
+                      }}
+                      autoFocus
+                    />
+                    {buscandoAlumno && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="animate-spin w-3.5 h-3.5 border-2 border-primary-400 border-t-transparent rounded-full" />
+                      </div>
+                    )}
+                    {alumnoSeleccionado && (
+                      <button type="button" onClick={limpiarSeleccion}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown de resultados */}
+                  {showDropdown && alumnoResults.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden">
+                      {alumnoResults.map((a) => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => seleccionarAlumno(a)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary-50 text-left transition-colors"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-xs shrink-0">
+                            {a.apellidos.charAt(0)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {a.apellidos}, {a.nombres}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {a.grado.nombre} · Sección {a.aula.seccion} · Cód. {a.codigo}
+                            </p>
+                          </div>
+                          <span className="text-xs text-gray-300">{a._count.matriculas} cursos</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {showDropdown && alumnoResults.length === 0 && !buscandoAlumno && alumnoQuery.length >= 2 && (
+                    <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white rounded-xl border border-gray-200 shadow-lg p-4 text-center text-sm text-gray-400">
+                      No se encontraron alumnos con "{alumnoQuery}"
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {form.alumnoId && (
+              {/* Ficha del alumno seleccionado */}
+              {alumnoSeleccionado && (
+                <div className="rounded-xl bg-primary-50 border border-primary-100 px-4 py-3 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-primary-200 flex items-center justify-center text-primary-700 font-bold text-sm shrink-0">
+                    {alumnoSeleccionado.apellidos.charAt(0)}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-primary-900 text-sm">
+                      {alumnoSeleccionado.apellidos}, {alumnoSeleccionado.nombres}
+                    </p>
+                    <p className="text-xs text-primary-600">
+                      {alumnoSeleccionado.grado.nombre} · Sección {alumnoSeleccionado.aula.seccion}
+                    </p>
+                  </div>
+                  <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
+                </div>
+              )}
+
+              {/* Cursos disponibles */}
+              {alumnoSeleccionado && (
                 <div className="form-group">
                   <label className="label">
-                    Cursos disponibles para {alumnoSeleccionado?.grado.nombre}
-                    <span className="text-gray-400 font-normal ml-1">({form.cursoIds.length} seleccionados)</span>
+                    Cursos de {alumnoSeleccionado.grado.nombre}
+                    <span className="text-gray-400 font-normal ml-1">
+                      ({cursoIds.length} nuevos seleccionados)
+                    </span>
                   </label>
+
                   {cursosFiltrados.length === 0 ? (
-                    <p className="text-sm text-gray-400 py-2">No hay cursos para este grado.</p>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex items-center gap-2 text-sm text-amber-700">
+                      <AlertCircle size={16} />
+                      No hay cursos registrados para {alumnoSeleccionado.grado.nombre}.
+                      Primero crea los cursos en la sección Cursos.
+                    </div>
                   ) : (
-                    <div className="border border-gray-200 rounded-lg divide-y max-h-64 overflow-y-auto">
-                      {cursosFiltrados.map((c) => (
-                        <label key={c.id}
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer">
-                          <input type="checkbox" checked={form.cursoIds.includes(c.id)}
-                            onChange={() => toggleCurso(c.id)}
-                            className="rounded border-gray-300 text-primary-600" />
-                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: c.color }} />
-                          <span className="text-sm font-medium text-gray-700">{c.nombre}</span>
-                          <span className="text-xs text-gray-400 ml-auto">{c.codigo}</span>
-                        </label>
-                      ))}
+                    <div className="border border-gray-200 rounded-xl divide-y max-h-56 overflow-y-auto">
+                      {cursosFiltrados.map((c) => {
+                        const yaMatriculado = cursosYaMatriculados.includes(c.id);
+                        const seleccionado = cursoIds.includes(c.id);
+                        return (
+                          <label
+                            key={c.id}
+                            className={cn(
+                              "flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors",
+                              yaMatriculado ? "bg-gray-50 cursor-not-allowed opacity-60" : "hover:bg-gray-50",
+                              seleccionado && "bg-primary-50"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={seleccionado || yaMatriculado}
+                              disabled={yaMatriculado}
+                              onChange={() => !yaMatriculado && toggleCurso(c.id)}
+                              className="rounded border-gray-300 text-primary-600 disabled:opacity-50"
+                            />
+                            <span
+                              className="w-3.5 h-3.5 rounded-full shrink-0"
+                              style={{ backgroundColor: c.color }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-gray-800">{c.nombre}</span>
+                              {c.docente && (
+                                <span className="text-xs text-gray-400 ml-2">· {c.docente.name}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400 shrink-0">{c.codigo}</span>
+                            {yaMatriculado && (
+                              <span className="badge badge-green shrink-0">Ya matriculado</span>
+                            )}
+                          </label>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary flex-1">Cancelar</button>
-                <button type="submit" disabled={saving || !form.cursoIds.length} className="btn-primary flex-1">
-                  {saving ? "Guardando..." : "Matricular"}
+              {!alumnoSeleccionado && (
+                <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-gray-400">
+                  <User size={28} className="mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">Busca y selecciona un alumno para ver sus cursos disponibles</p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setModalOpen(false); limpiarSeleccion(); }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !alumnoSeleccionado || cursoIds.length === 0}
+                  className="btn-primary flex-1"
+                >
+                  {saving ? "Guardando..." : `Matricular en ${cursoIds.length || 0} curso(s)`}
                 </button>
               </div>
             </form>
