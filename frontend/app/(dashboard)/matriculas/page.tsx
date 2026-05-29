@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import {
   Plus, Trash2, ClipboardList, Search, X,
-  ChevronDown, User, BookOpen, CheckCircle2, AlertCircle
+  ChevronDown, User, CheckCircle2, AlertCircle, UserPlus
 } from "lucide-react";
 import { ANIO_ACTUAL, cn } from "@/lib/utils";
 
@@ -15,15 +15,24 @@ type Alumno = {
   aula: { id: string; seccion: string };
   _count: { matriculas: number };
 };
+
+type CursoAula = { aulaId: string; docente: { id: string; name: string } | null };
+
 type Curso = {
   id: string; nombre: string; codigo: string; color: string; gradoId: string;
-  docente?: { name: string } | null;
+  cursoAulas: CursoAula[];
 };
+
 type Matricula = {
   id: string; anio: number;
-  alumno: { nombres: string; apellidos: string; codigo: string };
-  curso: { nombre: string; codigo: string; color: string; grado: { nombre: string } };
+  alumno: {
+    id: string; nombres: string; apellidos: string; codigo: string;
+    grado: { id: string; nombre: string };
+    aula: { id: string; seccion: string };
+  };
+  curso: { id: string; nombre: string; codigo: string; color: string; grado: { nombre: string } };
 };
+
 type Grado = { id: string; nombre: string };
 
 export default function MatriculasPage() {
@@ -47,13 +56,16 @@ export default function MatriculasPage() {
   const searchRef = useRef<HTMLDivElement>(null);
 
   const [cursoIds, setCursoIds] = useState<string[]>([]);
-
-  const cursosFiltrados = alumnoSeleccionado
-    ? cursos.filter((c) => c.gradoId === alumnoSeleccionado.grado.id)
-    : [];
-
-  // Cursos ya matriculados del alumno seleccionado
   const [cursosYaMatriculados, setCursosYaMatriculados] = useState<string[]>([]);
+
+  // Cursos del grado del alumno filtrados por su sección (via CursoAula)
+  const cursosFiltrados = alumnoSeleccionado
+    ? cursos.filter(
+        (c) =>
+          c.gradoId === alumnoSeleccionado.grado.id &&
+          c.cursoAulas.some((ca) => ca.aulaId === alumnoSeleccionado.aula.id)
+      )
+    : [];
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ anio: String(ANIO_ACTUAL) });
@@ -87,13 +99,11 @@ export default function MatriculasPage() {
     return () => clearTimeout(t);
   }, [alumnoQuery]);
 
-  // Cargar cursos ya matriculados al seleccionar alumno
   async function seleccionarAlumno(alumno: Alumno) {
     setAlumnoSeleccionado(alumno);
     setAlumnoQuery(`${alumno.apellidos}, ${alumno.nombres}`);
     setShowDropdown(false);
     setCursoIds([]);
-
     const res = await fetch(`/api/matriculas?alumnoId=${alumno.id}&anio=${ANIO_ACTUAL}`);
     const data = await res.json();
     setCursosYaMatriculados(
@@ -115,7 +125,6 @@ export default function MatriculasPage() {
     );
   }
 
-  // Cerrar dropdown al hacer click fuera
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -139,21 +148,36 @@ export default function MatriculasPage() {
     setSaving(false);
     if (!res.ok) { const d = await res.json(); toast.error(d.error || "Error."); return; }
     const d = await res.json();
-    toast.success(`${d.created} matrícula(s) registradas correctamente.`);
+    toast.success(`${d.created} matrícula(s) registradas.`);
     setModalOpen(false);
     limpiarSeleccion();
     load();
   }
 
-  async function del(id: string, nombre: string) {
-    if (!confirm(`¿Retirar la matrícula de "${nombre}"?`)) return;
+  async function retirar(id: string, label: string) {
+    if (!confirm(`¿Retirar la matrícula de "${label}"?`)) return;
     await fetch(`/api/matriculas/${id}`, { method: "DELETE" });
-    toast.success("Matrícula retirada."); load();
+    toast.success("Matrícula retirada.");
+    load();
   }
 
-  // Agrupar matrículas por alumno para la tabla
+  function abrirModalParaAlumno(mat: Matricula) {
+    limpiarSeleccion();
+    const alumno: Alumno = {
+      id: mat.alumno.id,
+      nombres: mat.alumno.nombres,
+      apellidos: mat.alumno.apellidos,
+      codigo: mat.alumno.codigo,
+      grado: mat.alumno.grado,
+      aula: mat.alumno.aula,
+      _count: { matriculas: 0 },
+    };
+    seleccionarAlumno(alumno);
+    setModalOpen(true);
+  }
+
   const matriculasPorAlumno = matriculas.reduce<Record<string, Matricula[]>>((acc, m) => {
-    const key = m.alumno.codigo;
+    const key = m.alumno.id;
     if (!acc[key]) acc[key] = [];
     acc[key].push(m);
     return acc;
@@ -194,7 +218,7 @@ export default function MatriculasPage() {
         </div>
       </div>
 
-      {/* Tabla de matrículas agrupada por alumno */}
+      {/* Tabla */}
       <div className="card">
         {loading ? (
           <div className="p-12 text-center text-gray-400">
@@ -220,10 +244,10 @@ export default function MatriculasPage() {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(matriculasPorAlumno).map(([codigo, mats]) => {
-                  const alumno = mats[0].alumno;
+                {Object.entries(matriculasPorAlumno).map(([alumnoId, mats]) => {
+                  const { alumno } = mats[0];
                   return (
-                    <tr key={codigo}>
+                    <tr key={alumnoId}>
                       <td>
                         <p className="font-medium text-gray-900">
                           {alumno.apellidos}, {alumno.nombres}
@@ -231,7 +255,8 @@ export default function MatriculasPage() {
                         <p className="text-xs text-gray-400 font-mono">{alumno.codigo}</p>
                       </td>
                       <td className="text-sm text-gray-600">
-                        {mats[0].curso.grado.nombre}
+                        {alumno.grado.nombre}
+                        <span className="ml-1 text-gray-400">· Sec. {alumno.aula.seccion}</span>
                       </td>
                       <td>
                         <div className="flex flex-wrap gap-1">
@@ -245,7 +270,7 @@ export default function MatriculasPage() {
                               </span>
                               {isAdmin && (
                                 <button
-                                  onClick={() => del(m.id, `${alumno.apellidos} - ${m.curso.nombre}`)}
+                                  onClick={() => retirar(m.id, `${alumno.apellidos} - ${m.curso.nombre}`)}
                                   className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"
                                   title={`Retirar ${m.curso.nombre}`}
                                 >
@@ -262,15 +287,12 @@ export default function MatriculasPage() {
                       {isAdmin && (
                         <td>
                           <button
-                            onClick={() => {
-                              // Pre-seleccionar alumno para agregar más cursos
-                              setAlumnoQuery(`${alumno.apellidos}, ${alumno.nombres}`);
-                              setModalOpen(true);
-                            }}
-                            className="btn-ghost btn-sm text-primary-600"
-                            title="Agregar más cursos"
+                            onClick={() => abrirModalParaAlumno(mats[0])}
+                            className="btn-ghost btn-sm text-primary-600 flex items-center gap-1"
+                            title="Agregar más cursos a este alumno"
                           >
-                            <Plus size={14} />
+                            <UserPlus size={14} />
+                            <span className="text-xs">Agregar curso</span>
                           </button>
                         </td>
                       )}
@@ -287,14 +309,15 @@ export default function MatriculasPage() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg animate-slide-in">
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Matricular Alumno</h2>
                 <p className="text-xs text-gray-400">Año escolar {ANIO_ACTUAL}</p>
               </div>
-              <button onClick={() => { setModalOpen(false); limpiarSeleccion(); }}
-                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100">
+              <button
+                onClick={() => { setModalOpen(false); limpiarSeleccion(); }}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -304,7 +327,7 @@ export default function MatriculasPage() {
               <div className="form-group">
                 <label className="label">
                   Buscar alumno
-                  <span className="text-gray-400 font-normal ml-1">(escribe nombre, apellido o código)</span>
+                  <span className="text-gray-400 font-normal ml-1">(nombre, apellido o código)</span>
                 </label>
                 <div ref={searchRef} className="relative">
                   <div className="relative">
@@ -336,7 +359,6 @@ export default function MatriculasPage() {
                     )}
                   </div>
 
-                  {/* Dropdown de resultados */}
                   {showDropdown && alumnoResults.length > 0 && (
                     <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden">
                       {alumnoResults.map((a) => (
@@ -365,7 +387,7 @@ export default function MatriculasPage() {
 
                   {showDropdown && alumnoResults.length === 0 && !buscandoAlumno && alumnoQuery.length >= 2 && (
                     <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white rounded-xl border border-gray-200 shadow-lg p-4 text-center text-sm text-gray-400">
-                      No se encontraron alumnos con "{alumnoQuery}"
+                      No se encontraron alumnos con &quot;{alumnoQuery}&quot;
                     </div>
                   )}
                 </div>
@@ -389,27 +411,35 @@ export default function MatriculasPage() {
                 </div>
               )}
 
-              {/* Cursos disponibles */}
+              {/* Cursos disponibles para la sección del alumno */}
               {alumnoSeleccionado && (
                 <div className="form-group">
                   <label className="label">
-                    Cursos de {alumnoSeleccionado.grado.nombre}
+                    Cursos de {alumnoSeleccionado.grado.nombre} · Sección {alumnoSeleccionado.aula.seccion}
                     <span className="text-gray-400 font-normal ml-1">
                       ({cursoIds.length} nuevos seleccionados)
                     </span>
                   </label>
 
                   {cursosFiltrados.length === 0 ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex items-center gap-2 text-sm text-amber-700">
-                      <AlertCircle size={16} />
-                      No hay cursos registrados para {alumnoSeleccionado.grado.nombre}.
-                      Primero crea los cursos en la sección Cursos.
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex items-start gap-2 text-sm text-amber-700">
+                      <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Sin cursos asignados para esta sección</p>
+                        <p className="text-xs mt-0.5">
+                          Ve a <strong>Cursos</strong> y usa el botón 👥 para asignar docentes
+                          por sección en {alumnoSeleccionado.grado.nombre}.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <div className="border border-gray-200 rounded-xl divide-y max-h-56 overflow-y-auto">
                       {cursosFiltrados.map((c) => {
                         const yaMatriculado = cursosYaMatriculados.includes(c.id);
                         const seleccionado = cursoIds.includes(c.id);
+                        const docente = c.cursoAulas.find(
+                          (ca) => ca.aulaId === alumnoSeleccionado.aula.id
+                        )?.docente;
                         return (
                           <label
                             key={c.id}
@@ -432,8 +462,8 @@ export default function MatriculasPage() {
                             />
                             <div className="flex-1 min-w-0">
                               <span className="text-sm font-medium text-gray-800">{c.nombre}</span>
-                              {c.docente && (
-                                <span className="text-xs text-gray-400 ml-2">· {c.docente.name}</span>
+                              {docente && (
+                                <span className="text-xs text-gray-400 ml-2">· {docente.name}</span>
                               )}
                             </div>
                             <span className="text-xs text-gray-400 shrink-0">{c.codigo}</span>
@@ -451,7 +481,7 @@ export default function MatriculasPage() {
               {!alumnoSeleccionado && (
                 <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-gray-400">
                   <User size={28} className="mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">Busca y selecciona un alumno para ver sus cursos disponibles</p>
+                  <p className="text-sm">Busca y selecciona un alumno para ver los cursos de su sección</p>
                 </div>
               )}
 

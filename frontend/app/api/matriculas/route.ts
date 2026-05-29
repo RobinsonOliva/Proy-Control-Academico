@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
   const alumnoId = searchParams.get("alumnoId");
   const cursoId = searchParams.get("cursoId");
   const anio = searchParams.get("anio");
+  const gradoId = searchParams.get("gradoId");
 
   const matriculas = await prisma.matricula.findMany({
     where: {
@@ -29,10 +30,22 @@ export async function GET(req: NextRequest) {
       ...(alumnoId ? { alumnoId } : {}),
       ...(cursoId ? { cursoId } : {}),
       ...(anio ? { anio: parseInt(anio) } : {}),
+      ...(gradoId ? { alumno: { gradoId } } : {}),
     },
     include: {
-      alumno: { select: { nombres: true, apellidos: true, codigo: true } },
-      curso: { select: { nombre: true, codigo: true, color: true, grado: { select: { nombre: true } } } },
+      alumno: {
+        select: {
+          id: true, nombres: true, apellidos: true, codigo: true,
+          grado: { select: { id: true, nombre: true } },
+          aula: { select: { id: true, seccion: true } },
+        },
+      },
+      curso: {
+        select: {
+          id: true, nombre: true, codigo: true, color: true,
+          grado: { select: { nombre: true } },
+        },
+      },
     },
     orderBy: [{ alumno: { apellidos: "asc" } }],
   });

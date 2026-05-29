@@ -357,8 +357,8 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
                     {b.nombre}
                   </th>
                 ))}
-                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 bg-gray-100 min-w-16">
-                  PROM
+                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 bg-gray-100 min-w-20 whitespace-nowrap">
+                  PROM FINAL
                 </th>
               </tr>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -381,7 +381,9 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
                     </th>
                   </React.Fragment>
                 ))}
-                <th className="px-3 py-2 bg-gray-100" />
+                <th className="px-3 py-2 bg-gray-100 text-center text-[10px] text-gray-400 font-normal whitespace-nowrap">
+                  prom(B1..B4)
+                </th>
               </tr>
             </thead>
 
