@@ -14,7 +14,7 @@ type CursoAula = {
 };
 
 type Curso = {
-  id: string; nombre: string; codigo: string; color: string; activo: boolean;
+  id: string; nombre: string; codigo: string; descripcion?: string; color: string; activo: boolean;
   gradoId: string;
   grado: { id: string; nombre: string };
   cursoAulas: CursoAula[];
@@ -72,7 +72,7 @@ export default function CursosPage() {
 
   function openEdit(c: Curso) {
     setEditing(c);
-    setForm({ nombre: c.nombre, codigo: c.codigo, descripcion: "", color: c.color, gradoId: c.gradoId });
+    setForm({ nombre: c.nombre, codigo: c.codigo, descripcion: c.descripcion ?? "", color: c.color, gradoId: c.gradoId });
     setModalOpen(true);
   }
 
@@ -129,9 +129,15 @@ export default function CursosPage() {
   }
 
   async function del(id: string) {
-    if (!confirm("¿Eliminar este curso? Se eliminarán todos sus bimestres y calificaciones.")) return;
+    if (!confirm("¿Eliminar este curso permanentemente?\nSe borrarán sus bimestres, criterios y asignaciones de docentes.\n(Bloqueado si tiene alumnos matriculados activos)")) return;
     const res = await fetch(`/api/cursos/${id}`, { method: "DELETE" });
-    if (res.ok) { toast.success("Curso eliminado."); load(); } else toast.error("Error al eliminar.");
+    if (res.ok) {
+      toast.success("Curso eliminado.");
+      load();
+    } else {
+      const d = await res.json();
+      toast.error(d.error || "Error al eliminar.");
+    }
   }
 
   return (

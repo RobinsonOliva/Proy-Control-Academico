@@ -55,10 +55,19 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   if (session?.user?.role !== "ADMIN") {
     return NextResponse.json({ error: "Solo administradores." }, { status: 403 });
   }
-  try {
-    await prisma.curso.update({ where: { id: params.id }, data: { activo: false } });
-    return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Error al eliminar." }, { status: 500 });
+
+  const activeMatriculas = await prisma.matricula.count({
+    where: { cursoId: params.id, activo: true },
+  });
+  if (activeMatriculas > 0) {
+    return NextResponse.json({
+      error: `El curso tiene ${activeMatriculas} alumno(s) matriculado(s) activo(s). Retira las matrículas antes de eliminar.`,
+    }, { status: 409 });
   }
+
+  // Eliminar matrículas inactivas (cascada a calificaciones)
+  await prisma.matricula.deleteMany({ where: { cursoId: params.id } });
+  // Hard delete: bimestres, criterios, cursoAulas se eliminan por cascade
+  await prisma.curso.delete({ where: { id: params.id } });
+  return NextResponse.json({ ok: true });
 }
