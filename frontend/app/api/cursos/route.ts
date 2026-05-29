@@ -10,7 +10,6 @@ const schema = z.object({
   descripcion: z.string().optional(),
   color: z.string().default("#4F46E5"),
   gradoId: z.string().min(1),
-  docenteId: z.string().optional().nullable(),
 });
 
 export async function GET(req: NextRequest) {
@@ -21,8 +20,13 @@ export async function GET(req: NextRequest) {
     where: { activo: true, ...(gradoId ? { gradoId } : {}) },
     orderBy: [{ grado: { orden: "asc" } }, { nombre: "asc" }],
     include: {
-      grado: { select: { nombre: true } },
-      docente: { select: { name: true } },
+      grado: { select: { id: true, nombre: true, nivel: true } },
+      cursoAulas: {
+        include: {
+          aula: { select: { id: true, seccion: true } },
+          docente: { select: { id: true, name: true } },
+        },
+      },
       _count: { select: { matriculas: true, bimestres: true } },
     },
   });
@@ -38,15 +42,10 @@ export async function POST(req: NextRequest) {
     const data = schema.parse(await req.json());
     const curso = await prisma.curso.create({ data: { ...data, codigo: data.codigo.toUpperCase() } });
 
-    // Crear 4 bimestres automáticamente
     await Promise.all(
       [1, 2, 3, 4].map((num) =>
         prisma.bimestre.create({
-          data: {
-            cursoId: curso.id,
-            numero: num,
-            nombre: `${num}° Bimestre`,
-          },
+          data: { cursoId: curso.id, numero: num, nombre: `${num}° Bimestre` },
         })
       )
     );

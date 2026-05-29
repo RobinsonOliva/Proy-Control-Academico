@@ -8,7 +8,6 @@ const schema = z.object({
   nombre: z.string().min(2).max(100).optional(),
   descripcion: z.string().optional().nullable(),
   color: z.string().optional(),
-  docenteId: z.string().optional().nullable(),
   activo: z.boolean().optional(),
 });
 
@@ -17,7 +16,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     where: { id: params.id },
     include: {
       grado: true,
-      docente: { select: { id: true, name: true, email: true } },
+      cursoAulas: {
+        include: {
+          aula: { select: { id: true, seccion: true } },
+          docente: { select: { id: true, name: true, email: true } },
+        },
+      },
       bimestres: {
         where: { activo: true },
         orderBy: { numero: "asc" },

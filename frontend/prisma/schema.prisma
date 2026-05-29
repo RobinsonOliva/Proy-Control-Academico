@@ -60,7 +60,7 @@ model User {
   accounts    Account[]
   sessions    Session[]
   invitations Invitation[] @relation("InvitedBy")
-  cursos      Curso[]      @relation("Docente")
+  cursoAulas  CursoAula[]  @relation("CursoAulaDocente")
 }
 
 enum Role {
@@ -113,7 +113,8 @@ model Aula {
   grado     Grado    @relation(fields: [gradoId], references: [id])
   createdAt DateTime @default(now())
 
-  alumnos Alumno[]
+  alumnos    Alumno[]
+  cursoAulas CursoAula[]
 
   @@unique([gradoId, seccion])
 }
@@ -127,14 +128,25 @@ model Curso {
   activo      Boolean  @default(true)
   gradoId     String
   grado       Grado    @relation(fields: [gradoId], references: [id])
-  docenteId   String?
-  docente     User?    @relation("Docente", fields: [docenteId], references: [id])
   createdAt   DateTime @default(now())
 
   bimestres  Bimestre[]
   matriculas Matricula[]
+  cursoAulas CursoAula[]
 
   @@unique([gradoId, codigo])
+}
+
+model CursoAula {
+  id        String  @id @default(cuid())
+  cursoId   String
+  aulaId    String
+  docenteId String?
+  curso     Curso   @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+  aula      Aula    @relation(fields: [aulaId], references: [id], onDelete: Cascade)
+  docente   User?   @relation("CursoAulaDocente", fields: [docenteId], references: [id])
+
+  @@unique([cursoId, aulaId])
 }
 
 // ============================================================
