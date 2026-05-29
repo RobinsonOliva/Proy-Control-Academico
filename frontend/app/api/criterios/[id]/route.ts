@@ -13,7 +13,7 @@ const schema = z.object({
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role === "VISUALIZADOR") {
+  if (!session || session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Sin autorización." }, { status: 403 });
   }
   try {
@@ -27,7 +27,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role === "VISUALIZADOR") {
+  if (!session || session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Sin autorización." }, { status: 403 });
   }
   try {

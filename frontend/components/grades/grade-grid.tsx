@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
-import { Save, Settings, Plus, Trash2 } from "lucide-react";
+import { Settings, Plus, Trash2, Lock, Pencil, Check, X } from "lucide-react";
 import {
   calcularPromedioBimestre, calcularPromedioGeneral,
   formatNota, getGradeLabel, cn
@@ -31,8 +32,17 @@ function getGradeCellClass(nota: number | null | undefined) {
   return "grade-c";
 }
 
+function calcPorcentaje(peso: number, criterios: Criterio[]): string {
+  const total = criterios.reduce((a, c) => a + c.peso, 0);
+  if (total === 0) return "0%";
+  return `${Math.round((peso / total) * 100)}%`;
+}
+
 export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
-  // Inicializar estado de notas desde los datos del servidor
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+  const isVisualizador = session?.user?.role === "VISUALIZADOR";
+
   const initNotas = () => {
     const map: Record<string, Record<string, number | null>> = {};
     for (const m of matriculas) {
@@ -50,6 +60,10 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
   const [bimestresState, setBimestresState] = useState<Bimestre[]>(bimestres);
   const [newCriterio, setNewCriterio] = useState({ bimestreId: "", nombre: "", peso: 1 });
 
+  // Estado para edición inline de criterio
+  const [editingCriterio, setEditingCriterio] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ nombre: "", peso: 1 });
+
   const handleNotaChange = useCallback(
     (matriculaId: string, criterioId: string, value: string) => {
       const nota = value === "" ? null : Math.min(20, Math.max(0, parseFloat(value)));
@@ -57,8 +71,7 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
         ...prev,
         [matriculaId]: { ...prev[matriculaId], [criterioId]: nota },
       }));
-    },
-    []
+    }, []
   );
 
   const handleNotaBlur = useCallback(
@@ -66,7 +79,6 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
       const nota = notas[matriculaId]?.[criterioId] ?? null;
       const key = `${matriculaId}-${criterioId}`;
       setSaving((p) => ({ ...p, [key]: true }));
-
       try {
         await fetch(`/api/calificaciones/${cursoId}`, {
           method: "POST",
@@ -78,14 +90,12 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
       } finally {
         setSaving((p) => ({ ...p, [key]: false }));
       }
-    },
-    [notas, cursoId]
+    }, [notas, cursoId]
   );
 
   const calcPromBimestre = (matriculaId: string, bimestre: Bimestre) => {
-    const criteriosActivos = bimestre.criterios;
-    const notasArr = criteriosActivos.map((c) => notas[matriculaId]?.[c.id] ?? null);
-    const pesosArr = criteriosActivos.map((c) => c.peso);
+    const notasArr = bimestre.criterios.map((c) => notas[matriculaId]?.[c.id] ?? null);
+    const pesosArr = bimestre.criterios.map((c) => c.peso);
     return calcularPromedioBimestre(notasArr, pesosArr);
   };
 
@@ -96,86 +106,195 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
 
   async function addCriterio(e: React.FormEvent) {
     e.preventDefault();
+    if (newCriterio.peso <= 0) { toast.error("El peso debe ser mayor a 0."); return; }
     const res = await fetch("/api/criterios", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...newCriterio, orden: 99 }),
     });
-    if (!res.ok) { toast.error("Error al agregar criterio."); return; }
+    if (!res.ok) { const d = await res.json(); toast.error(d.error || "Error al agregar."); return; }
     const crit = await res.json();
     setBimestresState((prev) =>
-      prev.map((b) =>
-        b.id === newCriterio.bimestreId
-          ? { ...b, criterios: [...b.criterios, crit] }
-          : b
-      )
+      prev.map((b) => b.id === newCriterio.bimestreId
+        ? { ...b, criterios: [...b.criterios, crit] } : b)
     );
     setNewCriterio({ bimestreId: "", nombre: "", peso: 1 });
     toast.success("Criterio agregado.");
   }
 
-  async function removeCriterio(bimestreId: string, criterioId: string) {
-    if (!confirm("¿Eliminar este criterio y sus notas asociadas?")) return;
-    await fetch(`/api/criterios/${criterioId}`, { method: "DELETE" });
+  function startEdit(c: Criterio) {
+    setEditingCriterio(c.id);
+    setEditForm({ nombre: c.nombre, peso: c.peso });
+  }
+
+  async function saveEdit(bimestreId: string, criterioId: string) {
+    if (editForm.peso <= 0) { toast.error("El peso debe ser mayor a 0."); return; }
+    const res = await fetch(`/api/criterios/${criterioId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: editForm.nombre, peso: editForm.peso }),
+    });
+    if (!res.ok) { toast.error("Error al actualizar."); return; }
+    const updated = await res.json();
     setBimestresState((prev) =>
-      prev.map((b) =>
-        b.id === bimestreId
-          ? { ...b, criterios: b.criterios.filter((c) => c.id !== criterioId) }
-          : b
-      )
+      prev.map((b) => b.id === bimestreId
+        ? { ...b, criterios: b.criterios.map((c) => c.id === criterioId ? { ...c, ...updated } : c) }
+        : b)
+    );
+    setEditingCriterio(null);
+    toast.success("Criterio actualizado.");
+  }
+
+  async function removeCriterio(bimestreId: string, criterioId: string, nombre: string) {
+    if (!confirm(`¿Eliminar el criterio "${nombre}"? Se perderán todas las notas asociadas.`)) return;
+    const res = await fetch(`/api/criterios/${criterioId}`, { method: "DELETE" });
+    if (!res.ok) { toast.error("Error al eliminar."); return; }
+    setBimestresState((prev) =>
+      prev.map((b) => b.id === bimestreId
+        ? { ...b, criterios: b.criterios.filter((c) => c.id !== criterioId) } : b)
     );
     toast.success("Criterio eliminado.");
   }
 
-  const totalColumnas = bimestresState.reduce((a, b) => a + b.criterios.length + 1, 0) + 1;
-
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-gray-500">
-          {matriculas.length} alumnos · Las notas se guardan automáticamente al salir de cada celda
+          {matriculas.length} alumnos ·{" "}
+          {isVisualizador
+            ? "Solo lectura"
+            : "Las notas se guardan automáticamente al salir de cada celda"}
         </p>
-        <button
-          onClick={() => setConfigOpen(!configOpen)}
-          className={cn("btn-secondary btn-sm gap-1.5", configOpen && "bg-primary-50 text-primary-700 border-primary-200")}
-        >
-          <Settings size={14} /> Configurar Criterios
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin ? (
+            <button
+              onClick={() => setConfigOpen(!configOpen)}
+              className={cn(
+                "btn-secondary btn-sm gap-1.5",
+                configOpen && "bg-primary-50 text-primary-700 border-primary-200"
+              )}
+            >
+              <Settings size={14} /> Configurar Criterios
+            </button>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+              <Lock size={12} /> Criterios configurados por el administrador
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Panel de configuración de criterios */}
-      {configOpen && (
+      {/* Panel de configuración — solo ADMIN */}
+      {isAdmin && configOpen && (
         <div className="card border-primary-100 bg-primary-50/30 animate-slide-in">
           <div className="card-header bg-primary-50/50 border-primary-100">
-            <h3 className="font-semibold text-primary-900 text-sm">Criterios de Evaluación por Bimestre</h3>
-            <p className="text-xs text-primary-600 mt-0.5">
-              El peso es relativo (ej: 4, 3, 2 = 44%, 33%, 22%)
-            </p>
-          </div>
-          <div className="p-5 space-y-5">
-            {bimestresState.map((b) => (
-              <div key={b.id}>
-                <p className="text-sm font-semibold text-gray-700 mb-2">{b.nombre}</p>
-                <div className="space-y-1.5">
-                  {b.criterios.map((c) => (
-                    <div key={c.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-gray-100">
-                      <span className="flex-1 text-sm text-gray-700">{c.nombre}</span>
-                      <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded">Peso: {c.peso}</span>
-                      <button
-                        onClick={() => removeCriterio(b.id, c.id)}
-                        className="text-red-400 hover:text-red-600 p-0.5"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-primary-900 text-sm">
+                  Configuración de Criterios de Evaluación
+                </h3>
+                <p className="text-xs text-primary-600 mt-0.5">
+                  El porcentaje se calcula automáticamente en base a los pesos relativos
+                </p>
               </div>
-            ))}
+              <span className="badge badge-purple">Solo Admin</span>
+            </div>
+          </div>
 
+          <div className="p-5 space-y-6">
+            {bimestresState.map((b) => {
+              const totalPeso = b.criterios.reduce((a, c) => a + c.peso, 0);
+              return (
+                <div key={b.id}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold text-gray-800">{b.nombre}</p>
+                    <span className="text-xs text-gray-400">
+                      {b.criterios.length} criterio(s) · Suma pesos: {totalPeso}
+                    </span>
+                  </div>
+
+                  {b.criterios.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic py-2">Sin criterios — agrega al menos uno</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {b.criterios.map((c) => (
+                        <div key={c.id}
+                          className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-100">
+                          {editingCriterio === c.id ? (
+                            // Modo edición inline
+                            <>
+                              <input
+                                className="input flex-1 text-sm py-1 h-8"
+                                value={editForm.nombre}
+                                onChange={(e) => setEditForm((p) => ({ ...p, nombre: e.target.value }))}
+                                autoFocus
+                              />
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-xs text-gray-400">Peso:</span>
+                                <input
+                                  type="number" min={0.1} max={100} step={0.1}
+                                  className="input w-16 text-sm py-1 h-8 text-center"
+                                  value={editForm.peso}
+                                  onChange={(e) => setEditForm((p) => ({ ...p, peso: parseFloat(e.target.value) }))}
+                                />
+                              </div>
+                              <button
+                                onClick={() => saveEdit(b.id, c.id)}
+                                className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+                                title="Guardar"
+                              >
+                                <Check size={14} />
+                              </button>
+                              <button
+                                onClick={() => setEditingCriterio(null)}
+                                className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                                title="Cancelar"
+                              >
+                                <X size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            // Modo lectura
+                            <>
+                              <span className="flex-1 text-sm text-gray-800">{c.nombre}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+                                  {calcPorcentaje(c.peso, b.criterios)}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  (peso: {c.peso})
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => startEdit(c)}
+                                className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded"
+                                title="Editar"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => removeCriterio(b.id, c.id, c.nombre)}
+                                className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded"
+                                title="Eliminar"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Agregar criterio */}
             <form onSubmit={addCriterio} className="border-t border-primary-100 pt-4">
-              <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Agregar Criterio</p>
+              <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                Agregar Nuevo Criterio
+              </p>
               <div className="flex gap-2 flex-wrap">
                 <select
                   className="input w-44 text-sm"
@@ -183,30 +302,36 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
                   onChange={(e) => setNewCriterio((p) => ({ ...p, bimestreId: e.target.value }))}
                   required
                 >
-                  <option value="">Bimestre...</option>
+                  <option value="">Seleccionar bimestre...</option>
                   {bimestresState.map((b) => (
                     <option key={b.id} value={b.id}>{b.nombre}</option>
                   ))}
                 </select>
                 <input
                   className="input flex-1 min-w-40 text-sm"
-                  placeholder="Nombre del criterio (ej: Examen)"
+                  placeholder="Nombre del criterio (ej: Examen Final)"
                   value={newCriterio.nombre}
                   onChange={(e) => setNewCriterio((p) => ({ ...p, nombre: e.target.value }))}
                   required
                 />
-                <input
-                  type="number" min={0.1} max={10} step={0.1}
-                  className="input w-24 text-sm"
-                  placeholder="Peso"
-                  value={newCriterio.peso}
-                  onChange={(e) => setNewCriterio((p) => ({ ...p, peso: parseFloat(e.target.value) }))}
-                  required
-                />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">Peso:</span>
+                  <input
+                    type="number" min={0.1} max={100} step={0.1}
+                    className="input w-20 text-sm"
+                    placeholder="1"
+                    value={newCriterio.peso}
+                    onChange={(e) => setNewCriterio((p) => ({ ...p, peso: parseFloat(e.target.value) }))}
+                    required
+                  />
+                </div>
                 <button type="submit" className="btn-primary btn-sm">
                   <Plus size={14} /> Agregar
                 </button>
               </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Ejemplo: Examen=4, Tarea=3, Participación=2, Comportamiento=1 → 40%, 30%, 20%, 10%
+              </p>
             </form>
           </div>
         </div>
@@ -222,17 +347,13 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
         <div className="grade-table-wrapper bg-white rounded-xl border border-gray-200 shadow-sm">
           <table className="grade-table w-full border-collapse text-sm">
             <thead>
-              {/* Fila 1: Bimestres */}
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="col-fixed px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap border-r border-gray-200 min-w-52">
                   Alumno
                 </th>
                 {bimestresState.map((b) => (
-                  <th
-                    key={b.id}
-                    colSpan={b.criterios.length + 1}
-                    className="px-2 py-2 text-center text-xs font-semibold text-gray-700 border-r border-gray-200 bg-gray-100"
-                  >
+                  <th key={b.id} colSpan={b.criterios.length + 1}
+                    className="px-2 py-2 text-center text-xs font-semibold text-gray-700 border-r border-gray-200 bg-gray-100">
                     {b.nombre}
                   </th>
                 ))}
@@ -240,23 +361,22 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
                   PROM
                 </th>
               </tr>
-
-              {/* Fila 2: Criterios */}
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="col-fixed px-4 py-2 text-left text-xs text-gray-400 border-r border-gray-200" />
+                <th className="col-fixed px-4 py-2 border-r border-gray-200" />
                 {bimestresState.map((b) => (
                   <React.Fragment key={b.id}>
                     {b.criterios.map((c) => (
-                      <th
-                        key={c.id}
+                      <th key={c.id}
                         className="px-2 py-2 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-16"
-                        title={`Peso: ${c.peso}`}
+                        title={`${c.nombre} — Peso: ${c.peso} (${calcPorcentaje(c.peso, b.criterios)})`}
                       >
                         {c.nombre.slice(0, 8)}
-                        <span className="text-gray-300 ml-0.5 text-[10px]">({c.peso})</span>
+                        <span className="block text-[10px] text-primary-400 font-semibold">
+                          {calcPorcentaje(c.peso, b.criterios)}
+                        </span>
                       </th>
                     ))}
-                    <th key={`prom-${b.id}`} className="px-2 py-2 text-center text-xs font-semibold text-gray-600 bg-gray-100 border-r border-gray-200 min-w-16">
+                    <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 bg-gray-100 border-r border-gray-200 min-w-16">
                       Prom
                     </th>
                   </React.Fragment>
@@ -269,21 +389,16 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
               {matriculas.map((m, idx) => {
                 const promGeneral = calcPromGeneral(m.id);
                 return (
-                  <tr
-                    key={m.id}
-                    className={cn("border-b border-gray-100 hover:bg-gray-50/40 transition-colors", idx % 2 === 0 ? "" : "bg-gray-50/30")}
-                  >
-                    {/* Nombre alumno - columna fija */}
+                  <tr key={m.id}
+                    className={cn("border-b border-gray-100 hover:bg-gray-50/40 transition-colors",
+                      idx % 2 !== 0 && "bg-gray-50/30")}>
                     <td className="col-fixed px-4 py-2 border-r border-gray-200 bg-white">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm whitespace-nowrap">
-                          {m.alumno.apellidos}, {m.alumno.nombres}
-                        </p>
-                        <p className="text-xs text-gray-400 font-mono">{m.alumno.codigo}</p>
-                      </div>
+                      <p className="font-medium text-gray-900 text-sm whitespace-nowrap">
+                        {m.alumno.apellidos}, {m.alumno.nombres}
+                      </p>
+                      <p className="text-xs text-gray-400 font-mono">{m.alumno.codigo}</p>
                     </td>
 
-                    {/* Notas por bimestre */}
                     {bimestresState.map((b) => {
                       const prom = calcPromBimestre(m.id, b);
                       return (
@@ -291,31 +406,26 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
                           {b.criterios.map((c) => {
                             const nota = notas[m.id]?.[c.id] ?? null;
                             const key = `${m.id}-${c.id}`;
-                            const isSaving = saving[key];
                             return (
                               <td key={c.id} className="px-1 py-1 text-center">
-                                <div className="relative">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={20}
-                                    step={0.5}
-                                    value={nota ?? ""}
-                                    placeholder="—"
-                                    onChange={(e) => handleNotaChange(m.id, c.id, e.target.value)}
-                                    onBlur={() => handleNotaBlur(m.id, c.id)}
-                                    className={cn(
-                                      "grade-input",
-                                      nota !== null ? getGradeCellClass(nota) : "grade-empty",
-                                      isSaving && "opacity-50"
-                                    )}
-                                  />
-                                </div>
+                                <input
+                                  type="number" min={0} max={20} step={0.5}
+                                  value={nota ?? ""}
+                                  placeholder="—"
+                                  readOnly={isVisualizador}
+                                  onChange={(e) => handleNotaChange(m.id, c.id, e.target.value)}
+                                  onBlur={() => !isVisualizador && handleNotaBlur(m.id, c.id)}
+                                  className={cn(
+                                    "grade-input",
+                                    nota !== null ? getGradeCellClass(nota) : "grade-empty",
+                                    saving[key] && "opacity-50",
+                                    isVisualizador && "cursor-not-allowed"
+                                  )}
+                                />
                               </td>
                             );
                           })}
-                          {/* Promedio del bimestre */}
-                          <td key={`prom-b${b.id}-${m.id}`} className="px-2 py-1 text-center border-r border-gray-100 bg-gray-50/50">
+                          <td className="px-2 py-1 text-center border-r border-gray-100 bg-gray-50/50">
                             <span className={cn(
                               "inline-block px-1.5 py-0.5 rounded text-xs font-semibold min-w-[2.5rem] text-center",
                               prom !== null ? getGradeCellClass(prom) : "text-gray-300"
@@ -327,21 +437,18 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
                       );
                     })}
 
-                    {/* Promedio general */}
                     <td className="px-3 py-1 text-center bg-gray-50/30">
-                      <div className="flex flex-col items-center">
-                        <span className={cn(
-                          "inline-block px-2 py-0.5 rounded-full text-xs font-bold",
-                          promGeneral !== null ? getGradeCellClass(promGeneral) : "text-gray-300"
-                        )}>
-                          {promGeneral !== null ? formatNota(promGeneral) : "—"}
+                      <span className={cn(
+                        "inline-block px-2 py-0.5 rounded-full text-xs font-bold",
+                        promGeneral !== null ? getGradeCellClass(promGeneral) : "text-gray-300"
+                      )}>
+                        {promGeneral !== null ? formatNota(promGeneral) : "—"}
+                      </span>
+                      {promGeneral !== null && (
+                        <span className="block text-[10px] font-semibold mt-0.5 text-gray-500">
+                          {getGradeLabel(promGeneral)}
                         </span>
-                        {promGeneral !== null && (
-                          <span className="text-[10px] font-semibold mt-0.5 text-gray-500">
-                            {getGradeLabel(promGeneral)}
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </td>
                   </tr>
                 );
