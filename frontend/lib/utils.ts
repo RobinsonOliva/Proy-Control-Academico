@@ -43,7 +43,7 @@ export function calcularPromedioBimestre(
   if (sumaPesos === 0) return null;
 
   const suma = validas.reduce((a, x) => a + x.nota! * x.peso, 0);
-  return Math.round((suma / sumaPesos) * 10) / 10;
+  return Math.min(20, Math.ceil(suma / sumaPesos));
 }
 
 export function calcularPromedioGeneral(
@@ -52,12 +52,12 @@ export function calcularPromedioGeneral(
   const validos = promediosBimestres.filter((p) => p !== null) as number[];
   if (validos.length === 0) return null;
   const suma = validos.reduce((a, b) => a + b, 0);
-  return Math.round((suma / validos.length) * 10) / 10;
+  return Math.min(20, Math.ceil(suma / validos.length));
 }
 
 export function formatNota(nota: number | null | undefined): string {
   if (nota === null || nota === undefined) return "—";
-  return nota.toFixed(1);
+  return String(Math.min(20, Math.ceil(nota)));
 }
 
 export function generateCode(length = 8): string {

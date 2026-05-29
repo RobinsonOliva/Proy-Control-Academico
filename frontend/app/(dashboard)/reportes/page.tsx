@@ -44,7 +44,7 @@ function calcCourseAverage(curso: Awaited<ReturnType<typeof getReportData>>["res
       for (const cal of c.calificaciones)
         if (cal.nota !== null) notas.push(cal.nota);
   if (notas.length === 0) return null;
-  return notas.reduce((a, b) => a + b, 0) / notas.length;
+  return Math.min(20, Math.ceil(notas.reduce((a, b) => a + b, 0) / notas.length));
 }
 
 export default async function ReportesPage() {
@@ -122,7 +122,7 @@ export default async function ReportesPage() {
                             <div className={`h-2 rounded-full ${promedio >= 18 ? "bg-emerald-400" : promedio >= 14 ? "bg-blue-400" : promedio >= 11 ? "bg-amber-400" : "bg-red-400"}`}
                               style={{ width: `${bar}%` }} />
                           </div>
-                          <span className="font-semibold text-sm w-10 text-right">{promedio.toFixed(1)}</span>
+                          <span className="font-semibold text-sm w-10 text-right">{promedio}</span>
                         </div>
                       ) : (
                         <span className="text-gray-300 text-sm">Sin notas</span>
