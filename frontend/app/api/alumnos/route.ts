@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
     },
     orderBy: [{ apellidos: "asc" }, { nombres: "asc" }],
     include: {
-      grado: { select: { nombre: true, nivel: true } },
-      aula: { select: { seccion: true } },
+      grado: { select: { id: true, nombre: true, nivel: true } },
+      aula: { select: { id: true, seccion: true } },
       _count: { select: { matriculas: true } },
     },
   });
