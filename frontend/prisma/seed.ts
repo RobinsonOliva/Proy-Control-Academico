@@ -84,7 +84,7 @@ async function main() {
       const c = await prisma.curso.upsert({
         where: { gradoId_codigo: { gradoId: primerGrado.id, codigo: curso.codigo } },
         update: {},
-        create: { ...curso, gradoId: primerGrado.id, docenteId: admin.id },
+        create: { ...curso, gradoId: primerGrado.id },
       });
 
       // Crear 4 bimestres con criterios por defecto
