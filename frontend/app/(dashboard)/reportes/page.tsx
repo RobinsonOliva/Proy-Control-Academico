@@ -44,7 +44,7 @@ function calcCourseAverage(curso: Awaited<ReturnType<typeof getReportData>>["res
       for (const cal of c.calificaciones)
         if (cal.nota !== null) notas.push(cal.nota);
   if (notas.length === 0) return null;
-  return Math.min(20, Math.ceil(notas.reduce((a, b) => a + b, 0) / notas.length));
+  return Math.min(20, Math.round(notas.reduce((a, b) => a + b, 0) / notas.length));
 }
 
 export default async function ReportesPage() {
