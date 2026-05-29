@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
-import { ANIO_ACTUAL } from "@/lib/utils";
+import { getAnioEscolar } from "@/lib/config";
 
 const schema = z.object({
   nombre: z.string().min(2).max(100),
@@ -16,6 +16,7 @@ const schema = z.object({
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const gradoId = searchParams.get("gradoId");
+  const anio = await getAnioEscolar();
 
   const cursos = await prisma.curso.findMany({
     where: { activo: true, ...(gradoId ? { gradoId } : {}) },
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
       },
       _count: {
         select: {
-          matriculas: { where: { anio: ANIO_ACTUAL, activo: true } },
+          matriculas: { where: { anio, activo: true } },
           bimestres: true,
         },
       },

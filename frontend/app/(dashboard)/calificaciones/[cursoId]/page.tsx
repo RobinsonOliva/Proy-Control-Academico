@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/db";
-import { ANIO_ACTUAL } from "@/lib/utils";
+import { getAnioEscolar } from "@/lib/config";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 
@@ -25,10 +25,10 @@ async function getData(cursoId: string) {
   return curso;
 }
 
-async function getAulasConAlumnos(cursoId: string) {
+async function getAulasConAlumnos(cursoId: string, anio: number) {
   // Distinct aulas that have students enrolled in this course
   const matriculas = await prisma.matricula.findMany({
-    where: { cursoId, anio: ANIO_ACTUAL, activo: true },
+    where: { cursoId, anio, activo: true },
     select: { alumno: { select: { aulaId: true, aula: { select: { id: true, seccion: true } } } } },
   });
   const map = new Map<string, { id: string; seccion: string; count: number }>();
@@ -41,7 +41,10 @@ async function getAulasConAlumnos(cursoId: string) {
 }
 
 export default async function CursoSectionsPage({ params }: { params: { cursoId: string } }) {
-  const session = await getServerSession(authOptions);
+  const [session, anio] = await Promise.all([
+    getServerSession(authOptions),
+    getAnioEscolar(),
+  ]);
   const role = session?.user?.role;
 
   const curso = await getData(params.cursoId);
@@ -64,7 +67,7 @@ export default async function CursoSectionsPage({ params }: { params: { cursoId:
   }
 
   // Multiple sections or no CursoAula: show section selector
-  const aulasConAlumnos = await getAulasConAlumnos(params.cursoId);
+  const aulasConAlumnos = await getAulasConAlumnos(params.cursoId, anio);
 
   // Merge CursoAula info with enrollment data
   const docenteByAula = Object.fromEntries(

@@ -3,27 +3,24 @@ export const dynamic = "force-dynamic";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/db";
-import { ANIO_ACTUAL } from "@/lib/utils";
-import { Users, BookOpen, GraduationCap, School, TrendingUp, Award, ClipboardList } from "lucide-react";
+import { getAnioEscolar } from "@/lib/config";
+import { Users, BookOpen, GraduationCap, TrendingUp, Award, ClipboardList } from "lucide-react";
 import Link from "next/link";
 
-async function getStats() {
-  const [totalAlumnos, totalDocentes, totalCursos, totalGrados, totalMatriculas, cursosRecientes, alumnosPorNivel] =
+async function getStats(anio: number) {
+  const [totalAlumnos, totalDocentes, totalCursos, totalMatriculas, cursosRecientes, gradosPorNivel] =
     await Promise.all([
       prisma.alumno.count({ where: { activo: true } }),
       prisma.user.count({ where: { active: true, role: { in: ["DOCENTE", "ADMIN"] } } }),
       prisma.curso.count({ where: { activo: true } }),
-      prisma.grado.count({ where: { activo: true } }),
-      prisma.matricula.count({ where: { activo: true, anio: ANIO_ACTUAL } }),
+      prisma.matricula.count({ where: { activo: true, anio } }),
       prisma.curso.findMany({
         where: { activo: true },
         take: 5,
         orderBy: { createdAt: "desc" },
         include: {
           grado: { select: { nombre: true } },
-          _count: {
-            select: { matriculas: { where: { anio: ANIO_ACTUAL, activo: true } } },
-          },
+          _count: { select: { matriculas: { where: { anio, activo: true } } } },
         },
       }),
       prisma.grado.groupBy({
@@ -32,37 +29,38 @@ async function getStats() {
         _count: { id: true },
       }),
     ]);
-
-  return { totalAlumnos, totalDocentes, totalCursos, totalGrados, totalMatriculas, cursosRecientes, alumnosPorNivel };
+  return { totalAlumnos, totalDocentes, totalCursos, totalMatriculas, cursosRecientes, gradosPorNivel };
 }
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
-  const stats = await getStats();
+  const [session, anio] = await Promise.all([
+    getServerSession(authOptions),
+    getAnioEscolar(),
+  ]);
+  const stats = await getStats(anio);
 
   const statsCards = [
-    { label: "Total Alumnos",    value: stats.totalAlumnos,    icon: Users,          color: "bg-blue-500",    bg: "bg-blue-50",    href: "/alumnos" },
-    { label: "Docentes",          value: stats.totalDocentes,   icon: GraduationCap,  color: "bg-purple-500",  bg: "bg-purple-50",  href: "/usuarios" },
-    { label: "Cursos Activos",    value: stats.totalCursos,     icon: BookOpen,       color: "bg-emerald-500", bg: "bg-emerald-50", href: "/cursos" },
-    { label: `Matrículas ${ANIO_ACTUAL}`, value: stats.totalMatriculas, icon: ClipboardList, color: "bg-amber-500", bg: "bg-amber-50", href: "/matriculas" },
+    { label: "Total Alumnos",      value: stats.totalAlumnos,   icon: Users,         color: "bg-blue-500",    bg: "bg-blue-50",    href: "/alumnos" },
+    { label: "Docentes",           value: stats.totalDocentes,  icon: GraduationCap, color: "bg-purple-500",  bg: "bg-purple-50",  href: "/usuarios" },
+    { label: "Cursos Activos",     value: stats.totalCursos,    icon: BookOpen,      color: "bg-emerald-500", bg: "bg-emerald-50", href: "/cursos" },
+    { label: `Matrículas ${anio}`, value: stats.totalMatriculas,icon: ClipboardList, color: "bg-amber-500",   bg: "bg-amber-50",   href: "/matriculas" },
   ];
 
   const nivelColors: Record<string, string> = {
-    INICIAL:    "bg-pink-100 text-pink-700",
-    PRIMARIA:   "bg-blue-100 text-blue-700",
+    INICIAL: "bg-pink-100 text-pink-700",
+    PRIMARIA: "bg-blue-100 text-blue-700",
     SECUNDARIA: "bg-violet-100 text-violet-700",
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Bienvenida */}
       <div className="card p-6 bg-gradient-to-r from-primary-600 to-primary-700 text-white border-0">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-primary-200 text-sm">Bienvenido de vuelta,</p>
             <h2 className="text-2xl font-bold mt-0.5">{session?.user?.name}</h2>
             <p className="text-primary-200 text-sm mt-1">
-              Año escolar {ANIO_ACTUAL} ·{" "}
+              Año escolar {anio} ·{" "}
               {session?.user?.role === "ADMIN" ? "Administrador" :
                session?.user?.role === "DOCENTE" ? "Docente" : "Visualizador"}
             </p>
@@ -73,7 +71,6 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statsCards.map(({ label, value, icon: Icon, color, bg, href }) => (
           <Link key={label} href={href} className="card p-5 hover:shadow-md transition-all group">
@@ -95,7 +92,6 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Cursos recientes */}
         <div className="card lg:col-span-2">
           <div className="card-header flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">Cursos Recientes</h3>
@@ -110,10 +106,8 @@ export default async function DashboardPage() {
             ) : (
               stats.cursosRecientes.map((curso) => (
                 <div key={curso.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50 transition-colors">
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
-                    style={{ backgroundColor: curso.color }}
-                  >
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
+                    style={{ backgroundColor: curso.color }}>
                     {curso.codigo.slice(0, 3)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -121,7 +115,7 @@ export default async function DashboardPage() {
                     <p className="text-xs text-gray-400">{curso.grado.nombre}</p>
                   </div>
                   <span className="text-xs text-gray-500">
-                    {curso._count.matriculas} alumnos {ANIO_ACTUAL}
+                    {curso._count.matriculas} alumnos {anio}
                   </span>
                 </div>
               ))
@@ -129,23 +123,17 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Distribución por nivel */}
         <div className="card">
           <div className="card-header">
             <h3 className="font-semibold text-gray-900">Grados por Nivel</h3>
           </div>
           <div className="p-6 space-y-4">
-            {stats.alumnosPorNivel.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center">Sin datos</p>
-            ) : (
-              stats.alumnosPorNivel.map((item) => (
-                <div key={item.nivel} className="flex items-center justify-between">
-                  <span className={`badge ${nivelColors[item.nivel] || "badge-gray"}`}>{item.nivel}</span>
-                  <span className="font-semibold text-gray-800">{item._count.id} grados</span>
-                </div>
-              ))
-            )}
-
+            {stats.gradosPorNivel.map((item) => (
+              <div key={item.nivel} className="flex items-center justify-between">
+                <span className={`badge ${nivelColors[item.nivel] || "badge-gray"}`}>{item.nivel}</span>
+                <span className="font-semibold text-gray-800">{item._count.id} grados</span>
+              </div>
+            ))}
             <div className="pt-4 border-t border-gray-100 space-y-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Accesos Rápidos</p>
               {[

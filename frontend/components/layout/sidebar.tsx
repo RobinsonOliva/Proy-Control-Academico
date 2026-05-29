@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, GraduationCap, School, BookOpen, Users,
-  ClipboardList, Award, BarChart3, UserCog, Search, ChevronRight, X
+  ClipboardList, Award, BarChart3, UserCog, Search, ChevronRight, X, Settings
 } from "lucide-react";
 
 const navItems = [
@@ -114,6 +114,14 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               >
                 <UserCog size={18} className="shrink-0" />
                 <span className="flex-1">Usuarios</span>
+              </Link>
+              <Link
+                href="/configuracion"
+                onClick={onClose}
+                className={cn("sidebar-link", pathname.startsWith("/configuracion") && "active")}
+              >
+                <Settings size={18} className="shrink-0" />
+                <span className="flex-1">Configuración</span>
               </Link>
             </>
           )}

@@ -3,18 +3,18 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
-import { ANIO_ACTUAL } from "@/lib/utils";
+import { getAnioEscolar } from "@/lib/config";
 
 const schema = z.object({
   alumnoId: z.string().min(1),
   cursoId: z.string().min(1),
-  anio: z.number().int().default(ANIO_ACTUAL),
+  anio: z.number().int().optional(),
 });
 
 const bulkSchema = z.object({
   alumnoId: z.string().min(1),
   cursoIds: z.array(z.string()).min(1),
-  anio: z.number().int().default(ANIO_ACTUAL),
+  anio: z.number().int().optional(),
 });
 
 async function validarDocente(alumnoId: string, cursoIds: string[]): Promise<string | null> {
@@ -76,9 +76,12 @@ export async function POST(req: NextRequest) {
   }
   try {
     const body = await req.json();
+    const anioActual = await getAnioEscolar();
 
     if (body.cursoIds) {
-      const { alumnoId, cursoIds, anio } = bulkSchema.parse(body);
+      const parsed = bulkSchema.parse(body);
+      const { alumnoId, cursoIds } = parsed;
+      const anio = parsed.anio ?? anioActual;
 
       const error = await validarDocente(alumnoId, cursoIds);
       if (error) return NextResponse.json({ error }, { status: 422 });
@@ -96,7 +99,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ created: ok });
     }
 
-    const { alumnoId, cursoId, anio } = schema.parse(body);
+    const parsed = schema.parse(body);
+    const { alumnoId, cursoId } = parsed;
+    const anio = parsed.anio ?? anioActual;
 
     const error = await validarDocente(alumnoId, [cursoId]);
     if (error) return NextResponse.json({ error }, { status: 422 });

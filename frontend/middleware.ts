@@ -6,8 +6,11 @@ export default withAuth(
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
-    // Ruta solo para admin
-    if (pathname.startsWith("/usuarios") && token?.role !== "ADMIN") {
+    // Rutas solo para admin
+    if (
+      (pathname.startsWith("/usuarios") || pathname.startsWith("/configuracion")) &&
+      token?.role !== "ADMIN"
+    ) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
@@ -32,5 +35,6 @@ export const config = {
     "/reportes/:path*",
     "/usuarios/:path*",
     "/busqueda/:path*",
+    "/configuracion/:path*",
   ],
 };

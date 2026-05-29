@@ -3,11 +3,11 @@ export const dynamic = "force-dynamic";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/db";
-import { ANIO_ACTUAL } from "@/lib/utils";
+import { getAnioEscolar } from "@/lib/config";
 import Link from "next/link";
 import { Award, ChevronRight, Lock } from "lucide-react";
 
-async function getDataAdmin() {
+async function getDataAdmin(anio: number) {
   return prisma.curso.findMany({
     where: { activo: true },
     orderBy: [{ grado: { orden: "asc" } }, { nombre: "asc" }],
@@ -20,7 +20,7 @@ async function getDataAdmin() {
         },
         orderBy: { aula: { seccion: "asc" } },
       },
-      _count: { select: { matriculas: { where: { anio: ANIO_ACTUAL, activo: true } } } },
+      _count: { select: { matriculas: { where: { anio, activo: true } } } },
     },
   });
 }
@@ -38,14 +38,17 @@ async function getDataDocente(userId: string) {
   });
 }
 
-async function countMatriculasPorAula(cursoId: string, aulaId: string) {
+async function countMatriculasPorAula(cursoId: string, aulaId: string, anio: number) {
   return prisma.matricula.count({
-    where: { cursoId, anio: ANIO_ACTUAL, activo: true, alumno: { aulaId } },
+    where: { cursoId, anio, activo: true, alumno: { aulaId } },
   });
 }
 
 export default async function CalificacionesPage() {
-  const session = await getServerSession(authOptions);
+  const [session, anio] = await Promise.all([
+    getServerSession(authOptions),
+    getAnioEscolar(),
+  ]);
   const role = session?.user?.role;
   const userId = session?.user?.id;
 
@@ -71,7 +74,7 @@ export default async function CalificacionesPage() {
     }
 
     const counts = await Promise.all(
-      asignaciones.map((a) => countMatriculasPorAula(a.cursoId, a.aulaId))
+      asignaciones.map((a) => countMatriculasPorAula(a.cursoId, a.aulaId, anio))
     );
 
     return (
@@ -79,7 +82,7 @@ export default async function CalificacionesPage() {
         <div className="page-header">
           <div>
             <h1 className="page-title">Calificaciones</h1>
-            <p className="page-subtitle">Mis secciones asignadas · {ANIO_ACTUAL}</p>
+            <p className="page-subtitle">Mis secciones asignadas · {anio}</p>
           </div>
         </div>
         <div className="card">
@@ -112,7 +115,7 @@ export default async function CalificacionesPage() {
   }
 
   // ADMIN / VISUALIZADOR: all courses grouped by grade
-  const cursos = await getDataAdmin();
+  const cursos = await getDataAdmin(anio);
 
   const cursosPorGrado = cursos.reduce<Record<string, typeof cursos>>((acc, c) => {
     const key = c.grado.nombre;

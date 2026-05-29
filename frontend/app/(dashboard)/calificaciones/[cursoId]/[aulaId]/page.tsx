@@ -2,12 +2,12 @@ export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { ANIO_ACTUAL } from "@/lib/utils";
+import { getAnioEscolar } from "@/lib/config";
 import GradeGrid from "@/components/grades/grade-grid";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
-async function getData(cursoId: string, aulaId: string) {
+async function getData(cursoId: string, aulaId: string, anio: number) {
   const [curso, aula] = await Promise.all([
     prisma.curso.findUnique({
       where: { id: cursoId },
@@ -30,7 +30,7 @@ async function getData(cursoId: string, aulaId: string) {
   const matriculas = await prisma.matricula.findMany({
     where: {
       cursoId,
-      anio: ANIO_ACTUAL,
+      anio,
       activo: true,
       alumno: { aulaId },
     },
@@ -51,7 +51,8 @@ export default async function CursoAulaCalificacionesPage({
 }: {
   params: { cursoId: string; aulaId: string };
 }) {
-  const data = await getData(params.cursoId, params.aulaId);
+  const anio = await getAnioEscolar();
+  const data = await getData(params.cursoId, params.aulaId, anio);
   if (!data) notFound();
 
   const { curso, aula, matriculas } = data;
@@ -73,7 +74,7 @@ export default async function CursoAulaCalificacionesPage({
           <div>
             <h1 className="text-xl font-bold text-gray-900">{curso.nombre}</h1>
             <p className="text-sm text-gray-500">
-              {curso.grado.nombre} · Sección {aula.seccion} · {ANIO_ACTUAL} · {matriculas.length} alumnos
+              {curso.grado.nombre} · Sección {aula.seccion} · {anio} · {matriculas.length} alumnos
             </p>
           </div>
         </div>

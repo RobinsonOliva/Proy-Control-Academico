@@ -82,6 +82,16 @@ model Invitation {
 }
 
 // ============================================================
+// CONFIGURACIÓN GLOBAL
+// ============================================================
+
+model Configuracion {
+  id          String   @id @default("singleton")
+  anioEscolar Int
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
 // ESTRUCTURA ACADÉMICA
 // ============================================================
 

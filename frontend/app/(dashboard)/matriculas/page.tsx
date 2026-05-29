@@ -7,7 +7,7 @@ import {
   Plus, Trash2, ClipboardList, Search, X,
   ChevronDown, User, CheckCircle2, AlertCircle, UserPlus
 } from "lucide-react";
-import { ANIO_ACTUAL, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type Alumno = {
   id: string; nombres: string; apellidos: string; codigo: string;
@@ -39,6 +39,7 @@ export default function MatriculasPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
 
+  const [anio, setAnio] = useState<number>(new Date().getFullYear());
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [grados, setGrados] = useState<Grado[]>([]);
@@ -70,7 +71,10 @@ export default function MatriculasPage() {
     : [];
 
   const load = useCallback(async () => {
-    const params = new URLSearchParams({ anio: String(ANIO_ACTUAL) });
+    const cfg = await fetch("/api/config").then((r) => r.json());
+    const yearActual: number = cfg.anioEscolar ?? new Date().getFullYear();
+    setAnio(yearActual);
+    const params = new URLSearchParams({ anio: String(yearActual) });
     if (filterGrado) params.set("gradoId", filterGrado);
     const [m, c, g] = await Promise.all([
       fetch(`/api/matriculas?${params}`).then((r) => r.json()),
@@ -106,7 +110,7 @@ export default function MatriculasPage() {
     setAlumnoQuery(`${alumno.apellidos}, ${alumno.nombres}`);
     setShowDropdown(false);
     setCursoIds([]);
-    const res = await fetch(`/api/matriculas?alumnoId=${alumno.id}&anio=${ANIO_ACTUAL}`);
+    const res = await fetch(`/api/matriculas?alumnoId=${alumno.id}&anio=${anio}`);
     const data = await res.json();
     setCursosYaMatriculados(
       Array.isArray(data) ? data.map((m: { curso: { id: string } }) => m.curso.id) : []
@@ -145,7 +149,7 @@ export default function MatriculasPage() {
     const res = await fetch("/api/matriculas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ alumnoId: alumnoSeleccionado.id, cursoIds, anio: ANIO_ACTUAL }),
+      body: JSON.stringify({ alumnoId: alumnoSeleccionado.id, cursoIds, anio }),
     });
     setSaving(false);
     if (!res.ok) { const d = await res.json(); toast.error(d.error || "Error."); return; }
@@ -191,7 +195,7 @@ export default function MatriculasPage() {
         <div>
           <h1 className="page-title">Matrículas</h1>
           <p className="page-subtitle">
-            Año {ANIO_ACTUAL} · {matriculas.length} matrículas activas
+            Año {anio} · {matriculas.length} matrículas activas
             {!isAdmin && " · Solo administradores pueden matricular"}
           </p>
         </div>
@@ -314,7 +318,7 @@ export default function MatriculasPage() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Matricular Alumno</h2>
-                <p className="text-xs text-gray-400">Año escolar {ANIO_ACTUAL}</p>
+                <p className="text-xs text-gray-400">Año escolar {anio}</p>
               </div>
               <button
                 onClick={() => { setModalOpen(false); limpiarSeleccion(); }}
