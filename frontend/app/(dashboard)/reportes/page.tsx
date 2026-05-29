@@ -15,7 +15,7 @@ async function getReportData() {
       orderBy: [{ grado: { orden: "asc" } }, { nombre: "asc" }],
       include: {
         grado: { select: { nombre: true } },
-        _count: { select: { matriculas: true } },
+        _count: { select: { matriculas: { where: { anio: ANIO_ACTUAL, activo: true } } } },
         bimestres: {
           where: { activo: true },
           include: {
@@ -24,7 +24,10 @@ async function getReportData() {
               include: {
                 calificaciones: {
                   select: { nota: true },
-                  where: { nota: { not: null } },
+                  where: {
+                    nota: { not: null },
+                    matricula: { anio: ANIO_ACTUAL, activo: true },
+                  },
                 },
               },
             },

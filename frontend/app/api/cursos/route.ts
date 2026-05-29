@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
+import { ANIO_ACTUAL } from "@/lib/utils";
 
 const schema = z.object({
   nombre: z.string().min(2).max(100),
@@ -27,7 +28,12 @@ export async function GET(req: NextRequest) {
           docente: { select: { id: true, name: true } },
         },
       },
-      _count: { select: { matriculas: true, bimestres: true } },
+      _count: {
+        select: {
+          matriculas: { where: { anio: ANIO_ACTUAL, activo: true } },
+          bimestres: true,
+        },
+      },
     },
   });
   return NextResponse.json(cursos);

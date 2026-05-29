@@ -20,7 +20,7 @@ async function getDataAdmin() {
         },
         orderBy: { aula: { seccion: "asc" } },
       },
-      _count: { select: { matriculas: true } },
+      _count: { select: { matriculas: { where: { anio: ANIO_ACTUAL, activo: true } } } },
     },
   });
 }

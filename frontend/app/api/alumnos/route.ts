@@ -4,6 +4,7 @@ import { authOptions } from "@/auth";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
 import { Sexo } from "@prisma/client";
+import { ANIO_ACTUAL } from "@/lib/utils";
 
 const schema = z.object({
   nombres: z.string().min(2).max(100),
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
     include: {
       grado: { select: { id: true, nombre: true, nivel: true } },
       aula: { select: { id: true, seccion: true } },
-      _count: { select: { matriculas: true } },
+      _count: { select: { matriculas: { where: { anio: ANIO_ACTUAL, activo: true } } } },
     },
   });
   return NextResponse.json(alumnos);
