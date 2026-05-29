@@ -17,27 +17,44 @@ const bulkSchema = z.object({
   anio: z.number().int().default(ANIO_ACTUAL),
 });
 
+async function validarDocente(alumnoId: string, cursoIds: string[]): Promise<string | null> {
+  const alumno = await prisma.alumno.findUnique({ where: { id: alumnoId }, select: { aulaId: true } });
+  if (!alumno) return "Alumno no encontrado.";
+
+  for (const cursoId of cursoIds) {
+    const asignacion = await prisma.cursoAula.findFirst({
+      where: { cursoId, aulaId: alumno.aulaId, docenteId: { not: null } },
+      include: { curso: { select: { nombre: true } } },
+    });
+    if (!asignacion) {
+      const curso = await prisma.curso.findUnique({ where: { id: cursoId }, select: { nombre: true } });
+      return `El curso "${curso?.nombre ?? cursoId}" no tiene docente asignado en la sección del alumno.`;
+    }
+  }
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const alumnoId = searchParams.get("alumnoId");
-  const cursoId = searchParams.get("cursoId");
-  const anio = searchParams.get("anio");
-  const gradoId = searchParams.get("gradoId");
+  const cursoId  = searchParams.get("cursoId");
+  const anio     = searchParams.get("anio");
+  const gradoId  = searchParams.get("gradoId");
 
   const matriculas = await prisma.matricula.findMany({
     where: {
       activo: true,
       ...(alumnoId ? { alumnoId } : {}),
-      ...(cursoId ? { cursoId } : {}),
-      ...(anio ? { anio: parseInt(anio) } : {}),
-      ...(gradoId ? { alumno: { gradoId } } : {}),
+      ...(cursoId  ? { cursoId }  : {}),
+      ...(anio     ? { anio: parseInt(anio) } : {}),
+      ...(gradoId  ? { alumno: { gradoId } }  : {}),
     },
     include: {
       alumno: {
         select: {
           id: true, nombres: true, apellidos: true, codigo: true,
           grado: { select: { id: true, nombre: true } },
-          aula: { select: { id: true, seccion: true } },
+          aula:  { select: { id: true, seccion: true } },
         },
       },
       curso: {
@@ -54,15 +71,18 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role === "VISUALIZADOR") {
-    return NextResponse.json({ error: "Sin autorización." }, { status: 403 });
+  if (!session || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Solo administradores pueden matricular." }, { status: 403 });
   }
   try {
     const body = await req.json();
 
-    // Matrícula masiva (varios cursos a la vez)
     if (body.cursoIds) {
       const { alumnoId, cursoIds, anio } = bulkSchema.parse(body);
+
+      const error = await validarDocente(alumnoId, cursoIds);
+      if (error) return NextResponse.json({ error }, { status: 422 });
+
       const created = await Promise.allSettled(
         cursoIds.map((cursoId) =>
           prisma.matricula.upsert({
@@ -76,8 +96,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ created: ok });
     }
 
-    // Matrícula individual
     const { alumnoId, cursoId, anio } = schema.parse(body);
+
+    const error = await validarDocente(alumnoId, [cursoId]);
+    if (error) return NextResponse.json({ error }, { status: 422 });
+
     const matricula = await prisma.matricula.upsert({
       where: { alumnoId_cursoId_anio: { alumnoId, cursoId, anio } },
       update: { activo: true },

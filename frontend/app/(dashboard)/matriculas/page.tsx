@@ -16,7 +16,7 @@ type Alumno = {
   _count: { matriculas: number };
 };
 
-type CursoAula = { aulaId: string; docente: { id: string; name: string } | null };
+type CursoAula = { aulaId: string; docenteId: string | null; docente: { id: string; name: string } | null };
 
 type Curso = {
   id: string; nombre: string; codigo: string; color: string; gradoId: string;
@@ -58,12 +58,14 @@ export default function MatriculasPage() {
   const [cursoIds, setCursoIds] = useState<string[]>([]);
   const [cursosYaMatriculados, setCursosYaMatriculados] = useState<string[]>([]);
 
-  // Cursos del grado del alumno filtrados por su sección (via CursoAula)
+  // Solo cursos con docente asignado en la sección del alumno
   const cursosFiltrados = alumnoSeleccionado
     ? cursos.filter(
         (c) =>
           c.gradoId === alumnoSeleccionado.grado.id &&
-          c.cursoAulas.some((ca) => ca.aulaId === alumnoSeleccionado.aula.id)
+          c.cursoAulas.some(
+            (ca) => ca.aulaId === alumnoSeleccionado.aula.id && ca.docenteId !== null
+          )
       )
     : [];
 
