@@ -61,38 +61,46 @@ export default async function CursoAulaCalificacionesPage({
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href={`/calificaciones/${curso.id}`} className="btn-ghost btn-sm p-1.5">
+        <Link href={`/calificaciones/${curso.id}`} className="btn-ghost btn-sm p-1.5 shrink-0">
           <ChevronLeft size={18} />
         </Link>
-        <div className="flex items-center gap-3 flex-1">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0"
             style={{ backgroundColor: curso.color }}
           >
             {curso.codigo.slice(0, 3)}
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{curso.nombre}</h1>
-            <p className="text-sm text-gray-500">
-              {curso.grado.nombre} · Sección {aula.seccion} · {anio} · {matriculas.length} alumnos
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-bold text-gray-900 truncate">{curso.nombre}</h1>
+            <p className="text-xs sm:text-sm text-gray-500 truncate">
+              {curso.grado.nombre} · Sec. {aula.seccion} · {anio} · {matriculas.length} alumnos
             </p>
           </div>
         </div>
       </div>
 
       {/* Escala vigesimal */}
-      <div className="flex gap-3 text-xs flex-wrap">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 text-xs">
         <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-medium">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> AD: 18-20 (Logro Destacado)
+          <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0" />
+          <span>AD: 18-20</span>
+          <span className="hidden sm:inline text-emerald-500">(Logro Destacado)</span>
         </span>
         <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">
-          <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> A: 14-17 (Logro Esperado)
+          <span className="w-2 h-2 rounded-full bg-blue-400 inline-block shrink-0" />
+          <span>A: 14-17</span>
+          <span className="hidden sm:inline text-blue-500">(Logro Esperado)</span>
         </span>
         <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 font-medium">
-          <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> B: 11-13 (En Proceso)
+          <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shrink-0" />
+          <span>B: 11-13</span>
+          <span className="hidden sm:inline text-amber-500">(En Proceso)</span>
         </span>
         <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 font-medium">
-          <span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> C: 0-10 (En Inicio)
+          <span className="w-2 h-2 rounded-full bg-red-400 inline-block shrink-0" />
+          <span>C: 0-10</span>
+          <span className="hidden sm:inline text-red-500">(En Inicio)</span>
         </span>
       </div>
 

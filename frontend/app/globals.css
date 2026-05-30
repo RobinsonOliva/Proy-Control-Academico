@@ -137,11 +137,34 @@
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
 /* Grade table sticky */
-.grade-table-wrapper { overflow-x: auto; }
+.grade-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+.table-container {
+  -webkit-overflow-scrolling: touch;
+}
 .grade-table .col-fixed {
   position: sticky;
   left: 0;
   background: white;
   z-index: 10;
+  box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.12);
 }
-.grade-table thead .col-fixed { background: #f9fafb; }
+.grade-table thead .col-fixed {
+  background: #f9fafb;
+  box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.12);
+}
+.grade-table tbody tr:hover .col-fixed {
+  background: #f9fafb;
+}
+
+/* Hint visual de scroll horizontal */
+.scroll-hint {
+  display: none;
+}
+@media (max-width: 767px) {
+  .scroll-hint { display: flex; }
+  .grade-input { width: 2.75rem; font-size: 0.75rem; }
+}

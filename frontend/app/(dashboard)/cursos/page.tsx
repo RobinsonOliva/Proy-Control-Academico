@@ -243,14 +243,14 @@ export default function CursosPage() {
 
       {/* Modal Crear / Editar Curso */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 animate-slide-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 animate-slide-in my-4">
             <h2 className="text-lg font-bold text-gray-900 mb-5">
               {editing ? "Editar Curso" : "Nuevo Curso"}
             </h2>
             <form onSubmit={save} className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="form-group col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="form-group sm:col-span-2">
                   <label className="label">Nombre del curso</label>
                   <input
                     className="input"

@@ -165,7 +165,7 @@ export default function AlumnosPage() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 animate-slide-in my-4">
             <h2 className="text-lg font-bold text-gray-900 mb-5">{editing ? "Editar Alumno" : "Registrar Alumno"}</h2>
             <form onSubmit={save} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="form-group">
                   <label className="label">Apellidos</label>
                   <input className="input" placeholder="GARCIA LOPEZ" value={form.apellidos}
@@ -177,7 +177,7 @@ export default function AlumnosPage() {
                     onChange={(e) => setForm({ ...form, nombres: e.target.value.toUpperCase() })} required />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="form-group">
                   <label className="label">Código alumno</label>
                   <div className="flex gap-1">
@@ -200,7 +200,7 @@ export default function AlumnosPage() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="form-group">
                   <label className="label">Grado</label>
                   <select className="input" value={form.gradoId}
@@ -218,7 +218,7 @@ export default function AlumnosPage() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="form-group">
                   <label className="label">Fecha nacimiento</label>
                   <input type="date" className="input" value={form.fechaNacimiento}

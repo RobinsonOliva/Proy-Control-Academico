@@ -160,11 +160,14 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 hidden sm:block">
           {matriculas.length} alumnos ·{" "}
           {isVisualizador
             ? "Solo lectura"
-            : "Las notas se guardan automáticamente al salir de cada celda"}
+            : "Notas guardadas automáticamente"}
+        </p>
+        <p className="text-xs text-gray-400 sm:hidden">
+          {matriculas.length} alumnos · {isVisualizador ? "Solo lectura" : "Auto-guardado"}
         </p>
         <div className="flex items-center gap-2">
           {isAdmin ? (
@@ -175,11 +178,15 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
                 configOpen && "bg-primary-50 text-primary-700 border-primary-200"
               )}
             >
-              <Settings size={14} /> Configurar Criterios
+              <Settings size={14} />
+              <span className="hidden sm:inline">Configurar Criterios</span>
+              <span className="sm:hidden">Criterios</span>
             </button>
           ) : (
             <span className="flex items-center gap-1.5 text-xs text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
-              <Lock size={12} /> Criterios configurados por el administrador
+              <Lock size={12} />
+              <span className="hidden sm:inline">Criterios configurados por el administrador</span>
+              <span className="sm:hidden">Solo lectura</span>
             </span>
           )}
         </div>
@@ -344,11 +351,18 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
           <p className="text-sm mt-1">Matricula alumnos en la sección de Matrículas</p>
         </div>
       ) : (
+        <>
+          {/* Hint de scroll en mobile */}
+          <div className="scroll-hint items-center gap-1.5 text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+            <span>←</span>
+            <span>Desliza horizontalmente para ver todas las notas</span>
+            <span>→</span>
+          </div>
         <div className="grade-table-wrapper bg-white rounded-xl border border-gray-200 shadow-sm">
           <table className="grade-table w-full border-collapse text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="col-fixed px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap border-r border-gray-200 min-w-52">
+                <th className="col-fixed px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap border-r border-gray-200 min-w-36 sm:min-w-52">
                   Alumno
                 </th>
                 {bimestresState.map((b) => (
@@ -394,11 +408,11 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
                   <tr key={m.id}
                     className={cn("border-b border-gray-100 hover:bg-gray-50/40 transition-colors",
                       idx % 2 !== 0 && "bg-gray-50/30")}>
-                    <td className="col-fixed px-4 py-2 border-r border-gray-200 bg-white">
-                      <p className="font-medium text-gray-900 text-sm whitespace-nowrap">
+                    <td className="col-fixed px-3 py-2 border-r border-gray-200 bg-white">
+                      <p className="font-medium text-gray-900 text-xs sm:text-sm whitespace-nowrap">
                         {m.alumno.apellidos}, {m.alumno.nombres}
                       </p>
-                      <p className="text-xs text-gray-400 font-mono">{m.alumno.codigo}</p>
+                      <p className="text-xs text-gray-400 font-mono hidden sm:block">{m.alumno.codigo}</p>
                     </td>
 
                     {bimestresState.map((b) => {
@@ -458,6 +472,7 @@ export default function GradeGrid({ cursoId, bimestres, matriculas }: Props) {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
