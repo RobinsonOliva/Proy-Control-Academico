@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/db";
-import { calcularPromedioBimestre, calcularPromedioGeneral } from "@/lib/utils";
+import { calcularPromedioBimestre } from "@/lib/utils";
 import fs from "fs";
 import path from "path";
 
@@ -416,8 +416,10 @@ export async function GET(req: NextRequest) {
           data[`${clave}_${key}`] = toCalificativo(prom);
         }
 
-        const promAnual = calcularPromedioGeneral(bimestresPromedios);
-        data[`${clave}_ANU`] = toCalificativo(promAnual);
+        // La nota anual solo se muestra cuando existe el 4° bimestre
+        // y es exactamente igual a ese promedio
+        const promB4 = bimestresPromedios[3] ?? null;
+        data[`${clave}_ANU`] = toCalificativo(promB4);
       }
 
       // Generar documento con docxtemplater
