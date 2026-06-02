@@ -364,6 +364,7 @@ export async function GET(req: NextRequest) {
 
     for (const alumno of aula.alumnos) {
       const mats = matPorAlumno.get(alumno.id) ?? [];
+      if (mats.length === 0) continue; // sin matrícula activa en este año → omitir
 
       // Construir data object para docxtemplater
       const data: Record<string, string> = {
