@@ -99,14 +99,20 @@ function getRowCellTexts(rowXml: string): string[] {
   return cells;
 }
 
-/** Inserta un run con placeholder en la celda vacía N de una fila */
-function injectIntoNthCell(rowXml: string, n: number, placeholder: string): string {
+/** Inserta un run con placeholder en la celda vacía N de una fila.
+ *  rPrXml: XML de <w:rPr>...</w:rPr> a incluir en el run (opcional). */
+function injectIntoNthCell(
+  rowXml: string,
+  n: number,
+  placeholder: string,
+  rPrXml = ""
+): string {
   const b = getNthCellBounds(rowXml, n);
   if (!b) return rowXml;
   let cell = rowXml.slice(b.start, b.end);
   cell = cell.replace(
     /(<\/w:pPr>)(<\/w:p>)/,
-    `$1<w:r><w:t>${placeholder}</w:t></w:r>$2`
+    `$1<w:r>${rPrXml}<w:t>${placeholder}</w:t></w:r>$2`
   );
   return rowXml.slice(0, b.start) + cell + rowXml.slice(b.end);
 }
@@ -183,8 +189,17 @@ function addPlaceholders(xml: string): string {
     if (currentCode && cells.length === 7 && c1.trim() && !cells[2]?.trim()) {
       let newRow = row.text;
       const suffixes = ["B1", "B2", "B3", "B4", "ANU"];
+      // rPr explícito: Arial 7pt bold, garantiza que "AD/18" entre en la celda angosta
+      const noteRPr =
+        '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>' +
+        '<w:b/><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr>';
       for (let ci = 2; ci <= 6; ci++) {
-        newRow = injectIntoNthCell(newRow, ci, `{${currentCode}_${suffixes[ci - 2]}}`);
+        newRow = injectIntoNthCell(
+          newRow,
+          ci,
+          `{${currentCode}_${suffixes[ci - 2]}}`,
+          noteRPr
+        );
       }
       replacements.push({ start: row.start, end: row.end, newText: newRow });
     }
