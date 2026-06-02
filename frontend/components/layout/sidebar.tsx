@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, GraduationCap, School, BookOpen, Users,
-  ClipboardList, Award, BarChart3, UserCog, Search, ChevronRight, X, Settings
+  ClipboardList, Award, BarChart3, UserCog, Search, ChevronRight, X, Settings, BookText
 } from "lucide-react";
 
 const navItems = [
@@ -18,6 +18,7 @@ const navItems = [
   { label: "Matrículas", href: "/matriculas", icon: ClipboardList },
   { label: "Calificaciones", href: "/calificaciones", icon: Award },
   { label: "Reportes", href: "/reportes", icon: BarChart3 },
+  { label: "Libretas", href: "/libretas", icon: BookText },
 ];
 
 interface SidebarProps {

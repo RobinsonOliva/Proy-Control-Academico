@@ -1,0 +1,24 @@
+# MAPEO: Código de curso en sistema → Área curricular en plantilla Libreta Primaria
+# Formato: CODIGO | Nombre en sistema | Área en plantilla Word
+# ─────────────────────────────────────────────────────────────────────────────────
+
+PSO | Personal Social           → PERSONAL SOCIAL
+EDF | Educación Física          → EDUCACIÓN FÍSICA
+COM | Comunicación              → COMUNICACIÓN
+AYC | Arte y Cultura            → ARTE Y CULTURA
+ING | Ingles                    → INGLÉS COMO LENGUA EXTRANJERA
+MAT | Matemática                → MATEMÁTICA
+CYT | Ciencia y Tecnología      → CIENCIA Y TECNOLOGÍA
+REL | Educación Religiosa       → EDUCACIÓN RELIGIOSA
+DAN | Danza                     → DANZA
+CTR | Competencias Transversales → COMPETENCIAS TRANSVERSALES
+
+# REGLA: La nota de cada competencia en la libreta = promedio del bimestre del curso.
+# Los criterios de calificación (Evaluación Escrita, Trabajo Práctico, etc.) solo
+# sirven para calcular ese promedio ponderado internamente en el sistema.
+#
+# Escala usada en la libreta:
+#   AD  →  18 – 20  (Logro Destacado)
+#   A   →  14 – 17  (Logro Esperado)
+#   B   →  11 – 13  (En Proceso)
+#   C   →   0 – 10  (En Inicio)
