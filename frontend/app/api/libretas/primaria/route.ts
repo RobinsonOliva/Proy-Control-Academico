@@ -36,10 +36,11 @@ const AREAS_ORDENADAS: [string, string][] = [
 
 function toCalificativo(nota: number | null): string {
   if (nota === null || nota === undefined) return "";
-  if (nota >= 18) return "AD";
-  if (nota >= 14) return "A";
-  if (nota >= 11) return "B";
-  return "C";
+  const n = String(nota);
+  if (nota >= 18) return `AD/${n}`;
+  if (nota >= 14) return `A/${n}`;
+  if (nota >= 11) return `B/${n}`;
+  return `C/${n}`;
 }
 
 // ─── Helpers de XML ────────────────────────────────────────────────────────────
