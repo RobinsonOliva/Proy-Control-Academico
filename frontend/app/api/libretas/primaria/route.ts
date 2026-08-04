@@ -373,15 +373,15 @@ export async function GET(req: NextRequest) {
     // ── 4.5 Puntaje (suma de las 10 áreas) y orden de mérito por bimestre ───
     // El puntaje de un bimestre es la suma de la nota promedio (una sola por
     // curso, calculada de las calificaciones de ese bimestre) de los 10
-    // cursos. Solo se calcula si el alumno tiene promedio en las 10 áreas ese
-    // bimestre; si falta alguna, el puntaje (y el orden) quedan vacíos.
-    const TOTAL_AREAS = Object.keys(CODIGO_A_CLAVE).length;
-    const puntajesPorAlumno = new Map<string, (number | null)[]>(); // [B1, B2, B3, B4]
+    // cursos. Si un curso no tiene nota ese bimestre, se considera 0 para esa
+    // nota y se sigue acumulando en la suma (el puntaje siempre se calcula).
+    const puntajesPorAlumno = new Map<string, number[]>(); // [B1, B2, B3, B4]
 
     for (const alumno of aula.alumnos) {
       const mats = matPorAlumno.get(alumno.id) ?? [];
+      if (mats.length === 0) continue; // sin matrícula activa → no participa del orden de mérito
+
       const sumas = [0, 0, 0, 0];
-      const conteos = [0, 0, 0, 0];
 
       for (const mat of mats) {
         const clave = CODIGO_A_CLAVE[mat.curso.codigo];
@@ -397,25 +397,19 @@ export async function GET(req: NextRequest) {
           const califs = mat.calificaciones.filter(
             (cal) => cal.criterio.bimestreId === bimestre.id
           );
-          if (califs.length === 0) continue;
 
           const notas = bimestre.criterios.map((crit) => {
             const cal = califs.find((c) => c.criterioId === crit.id);
             return cal?.nota ?? null;
           });
           const pesos = bimestre.criterios.map((c) => c.peso);
-          const prom = calcularPromedioBimestre(notas, pesos);
-          if (prom === null) continue;
+          const prom = calcularPromedioBimestre(notas, pesos) ?? 0;
 
           sumas[idx] += prom;
-          conteos[idx]++;
         }
       }
 
-      const puntajes = sumas.map((suma, idx) =>
-        conteos[idx] === TOTAL_AREAS ? suma : null
-      );
-      puntajesPorAlumno.set(alumno.id, puntajes);
+      puntajesPorAlumno.set(alumno.id, sumas);
     }
 
     // Ranking descendente por puntaje (empates comparten puesto) por bimestre
