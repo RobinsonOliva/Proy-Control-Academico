@@ -90,6 +90,7 @@ model Configuracion {
   anioEscolar           Int
   institucionEducativa  String   @default("Santa María")
   seccionLibreta        String   @default("Única")
+  bimestreMerito        Int      @default(4)
   updatedAt             DateTime @updatedAt
 }
 
