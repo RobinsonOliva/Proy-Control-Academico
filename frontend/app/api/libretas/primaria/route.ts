@@ -100,16 +100,25 @@ function getRowCellTexts(rowXml: string): string[] {
 }
 
 /** Inserta un run con placeholder en la celda vacía N de una fila.
- *  rPrXml: XML de <w:rPr>...</w:rPr> a incluir en el run (opcional). */
+ *  rPrXml: XML de <w:rPr>...</w:rPr> a incluir en el run (opcional).
+ *  center: fuerza w:jc="center" en el párrafo de la celda. */
 function injectIntoNthCell(
   rowXml: string,
   n: number,
   placeholder: string,
-  rPrXml = ""
+  rPrXml = "",
+  center = false
 ): string {
   const b = getNthCellBounds(rowXml, n);
   if (!b) return rowXml;
   let cell = rowXml.slice(b.start, b.end);
+  if (center) {
+    if (/<w:jc w:val="[^"]*"\/>/.test(cell)) {
+      cell = cell.replace(/<w:jc w:val="[^"]*"\/>/, '<w:jc w:val="center"/>');
+    } else {
+      cell = cell.replace(/(<w:pPr>)/, '$1<w:jc w:val="center"/>');
+    }
+  }
   cell = cell.replace(
     /(<\/w:pPr>)(<\/w:p>)/,
     `$1<w:r>${rPrXml}<w:t>${placeholder}</w:t></w:r>$2`
@@ -198,7 +207,8 @@ function addPlaceholders(xml: string): string {
           newRow,
           ci,
           `{${currentCode}_${suffixes[ci - 2]}}`,
-          noteRPr
+          noteRPr,
+          true
         );
       }
       replacements.push({ start: row.start, end: row.end, newText: newRow });
