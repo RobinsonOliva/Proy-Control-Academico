@@ -86,9 +86,11 @@ model Invitation {
 // ============================================================
 
 model Configuracion {
-  id          String   @id @default("singleton")
-  anioEscolar Int
-  updatedAt   DateTime @updatedAt
+  id                    String   @id @default("singleton")
+  anioEscolar           Int
+  institucionEducativa  String   @default("Santa María")
+  seccionLibreta        String   @default("Única")
+  updatedAt             DateTime @updatedAt
 }
 
 // ============================================================

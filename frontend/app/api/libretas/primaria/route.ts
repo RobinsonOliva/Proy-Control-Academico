@@ -356,8 +356,9 @@ export async function GET(req: NextRequest) {
     const originalXml: string = tempZip.file("word/document.xml").asText();
     const modifiedXml = addPlaceholders(originalXml);
 
-    const schoolName =
-      process.env.NEXT_PUBLIC_SCHOOL_NAME || "Santa María";
+    const config = await prisma.configuracion.findUnique({ where: { id: "singleton" } });
+    const schoolName = config?.institucionEducativa || "Santa María";
+    const seccionLibreta = config?.seccionLibreta || "Única";
 
     // ── 6. Generar un documento por alumno ────────────────────────────────
     const docBuffers: Buffer[] = [];
@@ -370,7 +371,7 @@ export async function GET(req: NextRequest) {
       const data: Record<string, string> = {
         INSTITUCION: schoolName,
         GRADO: aula.grado.nombre,
-        SECCION: aula.seccion,
+        SECCION: seccionLibreta,
         ALUMNO: `${alumno.apellidos} ${alumno.nombres}`,
         DOCENTE: mainTeacher || "—",
         ANIO: String(anio),

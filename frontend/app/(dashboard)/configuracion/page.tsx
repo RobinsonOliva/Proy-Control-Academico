@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { Calendar, Save } from "lucide-react";
+import { Calendar, Save, School, Users } from "lucide-react";
 
 export default function ConfiguracionPage() {
   const [anio, setAnio] = useState<number>(new Date().getFullYear());
+  const [institucionEducativa, setInstitucionEducativa] = useState("");
+  const [seccionLibreta, setSeccionLibreta] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -14,6 +16,8 @@ export default function ConfiguracionPage() {
       .then((r) => r.json())
       .then((d) => {
         setAnio(d.anioEscolar ?? new Date().getFullYear());
+        setInstitucionEducativa(d.institucionEducativa ?? "");
+        setSeccionLibreta(d.seccionLibreta ?? "");
         setLoading(false);
       });
   }, []);
@@ -24,7 +28,7 @@ export default function ConfiguracionPage() {
     const res = await fetch("/api/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anioEscolar: anio }),
+      body: JSON.stringify({ anioEscolar: anio, institucionEducativa, seccionLibreta }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -32,7 +36,7 @@ export default function ConfiguracionPage() {
       toast.error(d.error || "Error al guardar.");
       return;
     }
-    toast.success(`Año escolar actualizado a ${anio}.`);
+    toast.success("Configuración actualizada.");
   }
 
   return (
@@ -47,7 +51,7 @@ export default function ConfiguracionPage() {
       <div className="card max-w-md">
         <div className="card-header flex items-center gap-2">
           <Calendar size={18} className="text-primary-600" />
-          <h3 className="font-semibold text-gray-900">Año Escolar Activo</h3>
+          <h3 className="font-semibold text-gray-900">Parámetros Generales</h3>
         </div>
         {loading ? (
           <div className="p-6 text-center text-gray-400">
@@ -68,6 +72,38 @@ export default function ConfiguracionPage() {
               />
               <p className="text-xs text-gray-400 mt-1">
                 Matrículas, notas y reportes se filtrarán por este año.
+              </p>
+            </div>
+            <div className="form-group">
+              <label className="label">
+                <School size={14} className="inline mr-1" />
+                Institución educativa
+              </label>
+              <input
+                type="text"
+                className="input"
+                value={institucionEducativa}
+                onChange={(e) => setInstitucionEducativa(e.target.value)}
+                required
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Nombre que aparece en el encabezado de las libretas de notas.
+              </p>
+            </div>
+            <div className="form-group">
+              <label className="label">
+                <Users size={14} className="inline mr-1" />
+                Sección (libreta)
+              </label>
+              <input
+                type="text"
+                className="input"
+                value={seccionLibreta}
+                onChange={(e) => setSeccionLibreta(e.target.value)}
+                required
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Texto que aparece como sección en el encabezado de las libretas (ej. &quot;Única&quot;).
               </p>
             </div>
             <button type="submit" disabled={saving} className="btn-primary w-full">
