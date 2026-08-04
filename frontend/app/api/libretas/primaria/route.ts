@@ -100,16 +100,25 @@ function getRowCellTexts(rowXml: string): string[] {
 }
 
 /** Inserta un run con placeholder en la celda vacía N de una fila.
- *  rPrXml: XML de <w:rPr>...</w:rPr> a incluir en el run (opcional). */
+ *  rPrXml: XML de <w:rPr>...</w:rPr> a incluir en el run (opcional).
+ *  center: fuerza w:jc="center" en el párrafo de la celda. */
 function injectIntoNthCell(
   rowXml: string,
   n: number,
   placeholder: string,
-  rPrXml = ""
+  rPrXml = "",
+  center = false
 ): string {
   const b = getNthCellBounds(rowXml, n);
   if (!b) return rowXml;
   let cell = rowXml.slice(b.start, b.end);
+  if (center) {
+    if (/<w:jc w:val="[^"]*"\/>/.test(cell)) {
+      cell = cell.replace(/<w:jc w:val="[^"]*"\/>/, '<w:jc w:val="center"/>');
+    } else {
+      cell = cell.replace(/(<w:pPr>)/, '$1<w:jc w:val="center"/>');
+    }
+  }
   cell = cell.replace(
     /(<\/w:pPr>)(<\/w:p>)/,
     `$1<w:r>${rPrXml}<w:t>${placeholder}</w:t></w:r>$2`
@@ -137,11 +146,34 @@ function addPlaceholders(xml: string): string {
   const replacements: Array<{ start: number; end: number; newText: string }> = [];
 
   let currentCode: string | null = null;
+  let inMerito = false;
 
   for (const row of rows) {
     const cells = getRowCellTexts(row.text);
     const c0 = cells[0] || "";
     const c1 = cells[1] || "";
+
+    // ── Cabecera de la tabla "ORDEN DE MÉRITO": PERIODO | PUNTAJE | ORDEN | CONDUCTA
+    if (c0.trim() === "PERIODO" && (cells[1] || "").includes("PUNTAJE")) {
+      inMerito = true;
+      continue;
+    }
+
+    // ── Filas de puntaje/orden por bimestre (1-4) dentro de la tabla de mérito
+    if (
+      inMerito &&
+      cells.length === 4 &&
+      ["1", "2", "3", "4"].includes(c0.trim()) &&
+      !cells[1]?.trim() &&
+      !cells[2]?.trim()
+    ) {
+      const periodo = c0.trim();
+      let newRow = injectIntoNthCell(row.text, 1, `{PUNTAJE_B${periodo}}`, "", true);
+      newRow = injectIntoNthCell(newRow, 2, `{ORDEN_B${periodo}}`, "", true);
+      replacements.push({ start: row.start, end: row.end, newText: newRow });
+      if (periodo === "4") inMerito = false;
+      continue;
+    }
 
     // ── Cabecera: institución (cell 1 tiene texto "S"+"anta"+" "+"María")
     if (cells.some((t) => t.includes("nstituci"))) {
@@ -198,7 +230,8 @@ function addPlaceholders(xml: string): string {
           newRow,
           ci,
           `{${currentCode}_${suffixes[ci - 2]}}`,
-          noteRPr
+          noteRPr,
+          true
         );
       }
       replacements.push({ start: row.start, end: row.end, newText: newRow });
@@ -337,6 +370,74 @@ export async function GET(req: NextRequest) {
       matPorAlumno.set(mat.alumnoId, arr);
     }
 
+    // ── 4.5 Puntaje (suma de las 10 áreas) y orden de mérito por bimestre ───
+    // El puntaje de un bimestre solo se calcula si el alumno tiene promedio en
+    // las 10 áreas curriculares ese bimestre; si falta alguna, queda vacío
+    // (igual criterio que la nota anual, que solo existe si hay 4° bimestre).
+    const TOTAL_AREAS = Object.keys(CODIGO_A_CLAVE).length;
+    const puntajesPorAlumno = new Map<string, (number | null)[]>(); // [B1, B2, B3, B4]
+
+    for (const alumno of aula.alumnos) {
+      const mats = matPorAlumno.get(alumno.id) ?? [];
+      const sumas = [0, 0, 0, 0];
+      const conteos = [0, 0, 0, 0];
+
+      for (const mat of mats) {
+        const clave = CODIGO_A_CLAVE[mat.curso.codigo];
+        if (!clave) continue;
+
+        const cursoData = cursos.find((c) => c.id === mat.cursoId);
+        if (!cursoData) continue;
+
+        for (const bimestre of cursoData.bimestres) {
+          const idx = bimestre.numero - 1;
+          if (idx < 0 || idx > 3) continue;
+
+          const califs = mat.calificaciones.filter(
+            (cal) => cal.criterio.bimestreId === bimestre.id
+          );
+          if (califs.length === 0) continue;
+
+          const notas = bimestre.criterios.map((crit) => {
+            const cal = califs.find((c) => c.criterioId === crit.id);
+            return cal?.nota ?? null;
+          });
+          const pesos = bimestre.criterios.map((c) => c.peso);
+          const prom = calcularPromedioBimestre(notas, pesos);
+          if (prom === null) continue;
+
+          sumas[idx] += prom;
+          conteos[idx]++;
+        }
+      }
+
+      const puntajes = sumas.map((suma, idx) =>
+        conteos[idx] === TOTAL_AREAS ? suma : null
+      );
+      puntajesPorAlumno.set(alumno.id, puntajes);
+    }
+
+    // Ranking descendente por puntaje (empates comparten puesto) por bimestre
+    const ordenPorAlumno = new Map<string, (number | null)[]>();
+    for (let idx = 0; idx < 4; idx++) {
+      const conPuntaje = aula.alumnos
+        .map((a) => ({ id: a.id, puntaje: puntajesPorAlumno.get(a.id)?.[idx] ?? null }))
+        .filter((x): x is { id: string; puntaje: number } => x.puntaje !== null)
+        .sort((a, b) => b.puntaje - a.puntaje);
+
+      let puesto = 0;
+      let puntajeAnterior: number | null = null;
+      conPuntaje.forEach((item, i) => {
+        if (item.puntaje !== puntajeAnterior) {
+          puesto = i + 1;
+          puntajeAnterior = item.puntaje;
+        }
+        const arr = ordenPorAlumno.get(item.id) ?? [null, null, null, null];
+        arr[idx] = puesto;
+        ordenPorAlumno.set(item.id, arr);
+      });
+    }
+
     // ── 5. Preparar template con placeholders ─────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const PizZip = require("pizzip");
@@ -384,6 +485,14 @@ export async function GET(req: NextRequest) {
         data[`${clave}_B3`] = "";
         data[`${clave}_B4`] = "";
         data[`${clave}_ANU`] = "";
+      }
+
+      // Puntaje (suma de las 10 áreas) y orden de mérito por bimestre
+      const puntajes = puntajesPorAlumno.get(alumno.id) ?? [null, null, null, null];
+      const ordenes = ordenPorAlumno.get(alumno.id) ?? [null, null, null, null];
+      for (let i = 0; i < 4; i++) {
+        data[`PUNTAJE_B${i + 1}`] = puntajes[i] === null ? "" : String(puntajes[i]);
+        data[`ORDEN_B${i + 1}`] = ordenes[i] === null ? "" : String(ordenes[i]);
       }
 
       // Calcular promedios por curso y bimestre
