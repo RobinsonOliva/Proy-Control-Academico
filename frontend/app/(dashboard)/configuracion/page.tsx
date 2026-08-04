@@ -2,13 +2,12 @@
 
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { Calendar, Save, School, Users, Trophy } from "lucide-react";
+import { Calendar, Save, School, Users } from "lucide-react";
 
 export default function ConfiguracionPage() {
   const [anio, setAnio] = useState<number>(new Date().getFullYear());
   const [institucionEducativa, setInstitucionEducativa] = useState("");
   const [seccionLibreta, setSeccionLibreta] = useState("");
-  const [bimestreMerito, setBimestreMerito] = useState<number>(4);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -19,7 +18,6 @@ export default function ConfiguracionPage() {
         setAnio(d.anioEscolar ?? new Date().getFullYear());
         setInstitucionEducativa(d.institucionEducativa ?? "");
         setSeccionLibreta(d.seccionLibreta ?? "");
-        setBimestreMerito(d.bimestreMerito ?? 4);
         setLoading(false);
       });
   }, []);
@@ -30,7 +28,7 @@ export default function ConfiguracionPage() {
     const res = await fetch("/api/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anioEscolar: anio, institucionEducativa, seccionLibreta, bimestreMerito }),
+      body: JSON.stringify({ anioEscolar: anio, institucionEducativa, seccionLibreta }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -106,25 +104,6 @@ export default function ConfiguracionPage() {
               />
               <p className="text-xs text-gray-400 mt-1">
                 Texto que aparece como sección en el encabezado de las libretas (ej. &quot;Única&quot;).
-              </p>
-            </div>
-            <div className="form-group">
-              <label className="label">
-                <Trophy size={14} className="inline mr-1" />
-                Bimestre para orden de mérito
-              </label>
-              <select
-                className="input"
-                value={bimestreMerito}
-                onChange={(e) => setBimestreMerito(Number(e.target.value))}
-              >
-                <option value={1}>1° Bimestre</option>
-                <option value={2}>2° Bimestre</option>
-                <option value={3}>3° Bimestre</option>
-                <option value={4}>4° Bimestre</option>
-              </select>
-              <p className="text-xs text-gray-400 mt-1">
-                Bimestre cuyas notas se usarán para calcular el orden de mérito en las libretas.
               </p>
             </div>
             <button type="submit" disabled={saving} className="btn-primary w-full">
