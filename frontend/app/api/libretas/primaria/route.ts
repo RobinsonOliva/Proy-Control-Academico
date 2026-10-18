@@ -101,13 +101,15 @@ function getRowCellTexts(rowXml: string): string[] {
 
 /** Inserta un run con placeholder en la celda vacía N de una fila.
  *  rPrXml: XML de <w:rPr>...</w:rPr> a incluir en el run (opcional).
- *  center: fuerza w:jc="center" en el párrafo de la celda. */
+ *  center: fuerza w:jc="center" en el párrafo de la celda.
+ *  tight: sin márgenes laterales ni salto de línea (columnas angostas de la 2.ª tabla). */
 function injectIntoNthCell(
   rowXml: string,
   n: number,
   placeholder: string,
   rPrXml = "",
-  center = false
+  center = false,
+  tight = false
 ): string {
   const b = getNthCellBounds(rowXml, n);
   if (!b) return rowXml;
@@ -118,6 +120,14 @@ function injectIntoNthCell(
     } else {
       cell = cell.replace(/(<w:pPr>)/, '$1<w:jc w:val="center"/>');
     }
+  }
+  if (tight) {
+    // Orden del esquema en tcPr: noWrap, tcMar, ..., vAlign
+    const tightXml =
+      '<w:noWrap/><w:tcMar><w:left w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tcMar>';
+    cell = /<w:vAlign /.test(cell)
+      ? cell.replace(/<w:vAlign /, tightXml + "<w:vAlign ")
+      : cell.replace(/<\/w:tcPr>/, tightXml + "</w:tcPr>");
   }
   cell = cell.replace(
     /(<\/w:pPr>)(<\/w:p>)/,
@@ -231,6 +241,7 @@ function addPlaceholders(xml: string): string {
           ci,
           `{${currentCode}_${suffixes[ci - 2]}}`,
           noteRPr,
+          true,
           true
         );
       }
